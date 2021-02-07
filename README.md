@@ -13,7 +13,7 @@
   8.数据全景(数字资产统计)
 后端技术实现：
   spring boot +postgresql +mongo +elasticsearch
-  tika
+  tika/EasyExcel/poi
   DaVinci
   datax/databus
 前端：
