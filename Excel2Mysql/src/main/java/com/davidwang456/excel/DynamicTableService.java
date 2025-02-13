@@ -24,25 +24,26 @@ public class DynamicTableService {
         
         // 构建建表SQL
         StringBuilder createTableSql = new StringBuilder();
-        createTableSql.append("CREATE TABLE ").append(tableName).append(" (");
+        createTableSql.append("CREATE TABLE `").append(tableName).append("` (");
         createTableSql.append("system_id BIGINT AUTO_INCREMENT PRIMARY KEY,");
         
         List<String> columnDefinitions = new ArrayList<>();
         headMap.forEach((index, columnName) -> {
             String formattedColumnName = formatColumnName(columnName);
             String dataType = dataTypeMap.getOrDefault(index, "VARCHAR(255)");
-            columnDefinitions.add(formattedColumnName + " " + dataType);
+            columnDefinitions.add("`" + formattedColumnName + "` " + dataType);
         });
         
         createTableSql.append(String.join(",", columnDefinitions));
         createTableSql.append(")");
 
+        LOGGER.info("创建表SQL: {}", createTableSql.toString());
         jdbcTemplate.execute(createTableSql.toString());
         LOGGER.info("表 {} 创建成功", tableName);
     }
 
     private void dropTableIfExists(String tableName) {
-        String sql = "DROP TABLE IF EXISTS " + tableName;
+        String sql = "DROP TABLE IF EXISTS `" + tableName + "`";
         jdbcTemplate.execute(sql);
     }
 
@@ -53,6 +54,7 @@ public class DynamicTableService {
                 .collect(Collectors.toList());
 
         String insertSql = generateInsertSql(tableName, columns);
+        LOGGER.info("插入数据SQL: {}", insertSql);
         
         List<Object[]> batchArgs = new ArrayList<>();
         for (Map<Integer, String> data : dataList) {
@@ -68,14 +70,22 @@ public class DynamicTableService {
 
     private String formatColumnName(String columnName) {
         // 先转换为拼音，然后确保符合SQL命名规范
-        return PinyinUtil.toPinyin(columnName)
+        String formatted = PinyinUtil.toPinyin(columnName)
                 .replaceAll("\\s+", "_")
                 .replaceAll("[^a-z0-9_]", "_");
+        
+        // 确保列名不以数字开头
+        if (formatted.matches("^\\d.*")) {
+            formatted = "col_" + formatted;
+        }
+        return formatted;
     }
 
     private String generateInsertSql(String tableName, List<String> columns) {
-        String columnList = String.join(",", columns);
+        String columnList = columns.stream()
+                .map(col -> "`" + col + "`")
+                .collect(Collectors.joining(","));
         String valuePlaceholders = String.join(",", Collections.nCopies(columns.size(), "?"));
-        return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columnList, valuePlaceholders);
+        return String.format("INSERT INTO `%s` (%s) VALUES (%s)", tableName, columnList, valuePlaceholders);
     }
 } 
