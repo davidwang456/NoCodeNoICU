@@ -21,6 +21,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
 
 @Api(tags = "Excel动态表管理")
 @RestController
@@ -93,7 +94,7 @@ public class ExcelController {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        String filename = URLEncoder.encode(tableName + ".xlsx");
+        String filename = URLEncoder.encode(tableName + System.currentTimeMillis() + ".xlsx", "UTF-8");
         headers.setContentDispositionFormData("attachment", filename);
 
         return ResponseEntity.ok()
@@ -112,11 +113,21 @@ public class ExcelController {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        String filename = URLEncoder.encode(tableName + ".csv");
+        String filename = URLEncoder.encode(tableName + System.currentTimeMillis() + ".csv", "UTF-8");
         headers.setContentDispositionFormData("attachment", filename);
 
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(outputStream.toByteArray());
+    }
+
+    @ApiOperation("分页查询数据")
+    @GetMapping("/data")
+    public Map<String, Object> getData(
+            @RequestParam String tableName,
+            @RequestParam(defaultValue = "MYSQL") String dataSource,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return exportService.getPageData(tableName, dataSource, page, size);
     }
 }

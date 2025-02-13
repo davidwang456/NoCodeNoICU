@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>数据导入导出管理</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        .container {
+            padding: 20px;
+        }
+        .upload-demo {
+            margin-bottom: 20px;
+        }
+        .table-operations {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <el-card>
+            <div slot="header">
+                <span>数据导入</span>
+            </div>
+            <el-upload
+                class="upload-demo"
+                :action="uploadUrl"
+                :data="uploadData"
+                :on-success="handleUploadSuccess"
+                :on-error="handleUploadError">
+                <el-button size="small" type="primary">选择文件</el-button>
+                <div slot="tip" class="el-upload__tip">只能上传xlsx/xls/csv文件</div>
+            </el-upload>
+            <el-radio-group v-model="uploadData.dataSource">
+                <el-radio label="MYSQL">MySQL</el-radio>
+                <el-radio label="MONGODB">MongoDB</el-radio>
+                <el-radio label="BOTH">Both</el-radio>
+            </el-radio-group>
+        </el-card>
+
+        <el-card style="margin-top: 20px;">
+            <div slot="header">
+                <span>数据管理</span>
+            </div>
+            <div class="table-operations">
+                <el-radio-group v-model="currentDataSource" @change="handleDataSourceChange">
+                    <el-radio label="MYSQL">MySQL</el-radio>
+                    <el-radio label="MONGODB">MongoDB</el-radio>
+                </el-radio-group>
+                <el-select v-model="currentTable" placeholder="请选择表" @change="loadTableData">
+                    <el-option
+                        v-for="table in tables"
+                        :key="table"
+                        :label="table"
+                        :value="table">
+                    </el-option>
+                </el-select>
+                <el-button type="success" @click="exportToExcel" :disabled="!currentTable">导出Excel</el-button>
+                <el-button type="success" @click="exportToCsv" :disabled="!currentTable">导出CSV</el-button>
+            </div>
+            
+            <el-table
+                v-loading="loading"
+                :data="tableData"
+                border
+                style="width: 100%">
+                <el-table-column
+                    v-for="header in tableHeaders"
+                    :key="header"
+                    :prop="header"
+                    :label="header">
+                </el-table-column>
+            </el-table>
+            <el-pagination
+                @current-change="handleCurrentChange"
+                :current-page="currentPage"
+                :page-size="pageSize"
+                :total="total"
+                layout="total, prev, pager, next">
+            </el-pagination>
+        </el-card>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                uploadUrl: '/uploadDynamicFile',
+                uploadData: {
+                    dataSource: 'MYSQL'
+                },
+                currentDataSource: 'MYSQL',
+                currentTable: '',
+                tables: [],
+                tableData: [],
+                tableHeaders: [],
+                loading: false,
+                currentPage: 1,
+                pageSize: 10,
+                total: 0
+            },
+            created() {
+                this.loadTables();
+            },
+            methods: {
+                handleUploadSuccess(response) {
+                    this.$message.success('上传成功');
+                    this.loadTables();
+                },
+                handleUploadError() {
+                    this.$message.error('上传失败');
+                },
+                loadTables() {
+                    axios.get(`/tables?dataSource=${this.currentDataSource}`)
+                        .then(response => {
+                            this.tables = response.data;
+                        })
+                        .catch(() => {
+                            this.$message.error('加载表列表失败');
+                        });
+                },
+                handleDataSourceChange() {
+                    this.currentTable = '';
+                    this.tableData = [];
+                    this.tableHeaders = [];
+                    this.loadTables();
+                },
+                loadTableData() {
+                    if (!this.currentTable) return;
+                    
+                    this.loading = true;
+                    axios.get(`/data?tableName=${this.currentTable}&dataSource=${this.currentDataSource}&page=${this.currentPage}&size=${this.pageSize}`)
+                        .then(response => {
+                            this.tableData = response.data.content;
+                            this.total = response.data.total;
+                            if (this.tableData.length > 0) {
+                                this.tableHeaders = Object.keys(this.tableData[0]);
+                            }
+                        })
+                        .catch(() => {
+                            this.$message.error('加载数据失败');
+                        })
+                        .finally(() => {
+                            this.loading = false;
+                        });
+                },
+                handleCurrentChange(page) {
+                    this.currentPage = page;
+                    this.loadTableData();
+                },
+                exportToExcel() {
+                    window.location.href = `/exportToExcel?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`;
+                },
+                exportToCsv() {
+                    window.location.href = `/exportToCsv?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`;
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

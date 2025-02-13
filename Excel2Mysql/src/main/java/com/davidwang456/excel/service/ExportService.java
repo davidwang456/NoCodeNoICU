@@ -88,4 +88,17 @@ public class ExportService {
     public List<String> getTableList(String dataSource) {
         return getExporter(dataSource).getTableList();
     }
+
+    public Map<String, Object> getPageData(String tableName, String dataSource, int page, int size) {
+        DataExporter exporter = getExporter(dataSource);
+        List<Map<String, Object>> allData = exporter.exportData(tableName);
+        
+        int start = (page - 1) * size;
+        int end = Math.min(start + size, allData.size());
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("content", allData.subList(start, end));
+        result.put("total", allData.size());
+        return result;
+    }
 } 
