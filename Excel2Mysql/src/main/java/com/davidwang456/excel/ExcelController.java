@@ -9,6 +9,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.alibaba.excel.EasyExcel;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import com.davidwang456.excel.util.PinyinUtil;
 
 @Api(tags = "Excel动态表管理")
 @RestController
@@ -20,9 +21,9 @@ public class ExcelController {
     @PostMapping("/uploadDynamicFile")
     public String uploadDynamicFile(@RequestParam("file") MultipartFile file) throws IOException {
         String originalFilename = file.getOriginalFilename();
-        String tableName = originalFilename.substring(0, originalFilename.lastIndexOf("."))
-                .toLowerCase()
-                .replaceAll("[^a-z0-9_]", "_");
+        String tableName = PinyinUtil.toPinyin(
+            originalFilename.substring(0, originalFilename.lastIndexOf("."))
+        );
         
         EasyExcel.read(
             file.getInputStream(), 
