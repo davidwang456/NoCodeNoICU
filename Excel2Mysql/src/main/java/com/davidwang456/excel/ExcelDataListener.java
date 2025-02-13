@@ -5,6 +5,8 @@ import com.alibaba.excel.event.AnalysisEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
+import com.davidwang456.excel.service.MongoTableService;
+import com.davidwang456.excel.enums.DataSourceType;
 
 public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExcelDataListener.class);
@@ -12,13 +14,18 @@ public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String
     private List<Map<Integer, String>> dataList = new ArrayList<>();
     private Map<Integer, String> headMap = new HashMap<>();
     private Map<Integer, String> dataTypeMap = new HashMap<>(); // 用于存储每列的数据类型
-    private String tableName;
-    private DynamicTableService tableService;
+    private final String tableName;
+    private final DynamicTableService mysqlService;
+    private final MongoTableService mongoService;
+    private final DataSourceType dataSource;
     private boolean isFirstRow = true;
 
-    public ExcelDataListener(String tableName, DynamicTableService tableService) {
+    public ExcelDataListener(String tableName, DynamicTableService mysqlService, 
+            MongoTableService mongoService, DataSourceType dataSource) {
         this.tableName = tableName;
-        this.tableService = tableService;
+        this.mysqlService = mysqlService;
+        this.mongoService = mongoService;
+        this.dataSource = dataSource;
     }
 
     @Override
@@ -73,13 +80,22 @@ public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String
     @Override
     public void invokeHeadMap(Map<Integer, String> headMap, AnalysisContext context) {
         this.headMap = headMap;
-        // 根据表头创建表
-        tableService.createTable(tableName, headMap, dataTypeMap);
+        if (dataSource == DataSourceType.MYSQL || dataSource == DataSourceType.BOTH) {
+            mysqlService.createTable(tableName, headMap, dataTypeMap);
+        }
+        if (dataSource == DataSourceType.MONGODB || dataSource == DataSourceType.BOTH) {
+            mongoService.createCollection(tableName);
+        }
     }
 
     private void saveData() {
         if (!dataList.isEmpty()) {
-            tableService.batchInsertData(tableName, headMap, dataList);
+            if (dataSource == DataSourceType.MYSQL || dataSource == DataSourceType.BOTH) {
+                mysqlService.batchInsertData(tableName, headMap, dataList);
+            }
+            if (dataSource == DataSourceType.MONGODB || dataSource == DataSourceType.BOTH) {
+                mongoService.batchInsertData(tableName, headMap, dataList);
+            }
         }
     }
 } 
