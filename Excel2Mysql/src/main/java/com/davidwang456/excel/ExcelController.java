@@ -2,6 +2,7 @@ package com.davidwang456.excel;
 
 import java.io.IOException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,6 +13,14 @@ import io.swagger.annotations.ApiOperation;
 import com.davidwang456.excel.util.PinyinUtil;
 import com.davidwang456.excel.enums.DataSourceType;
 import com.davidwang456.excel.service.MongoTableService;
+import com.davidwang456.excel.service.ExportService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import java.util.List;
 
 @Api(tags = "Excel动态表管理")
 @RestController
@@ -21,6 +30,9 @@ public class ExcelController {
     
     @Autowired
     private MongoTableService mongoTableService;
+
+    @Autowired
+    private ExportService exportService;
 
     @ApiOperation("动态创建表并导入数据")
     @PostMapping("/uploadDynamicFile")
@@ -62,5 +74,49 @@ public class ExcelController {
                 message = "数据导入成功！";
         }
         return message;
+    }
+
+    @ApiOperation("获取可导出的表名列表")
+    @GetMapping("/tables")
+    public List<String> getTableList(@RequestParam(value = "dataSource", defaultValue = "MYSQL") String dataSource) {
+        return exportService.getTableList(dataSource);
+    }
+
+    @ApiOperation("导出数据到Excel")
+    @GetMapping("/exportToExcel")
+    public ResponseEntity<byte[]> exportToExcel(
+            @RequestParam String tableName,
+            @RequestParam(defaultValue = "MYSQL") String dataSource) throws IOException {
+        
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        exportService.exportToExcel(tableName, dataSource, outputStream);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        String filename = URLEncoder.encode(tableName + ".xlsx");
+        headers.setContentDispositionFormData("attachment", filename);
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(outputStream.toByteArray());
+    }
+
+    @ApiOperation("导出数据到CSV")
+    @GetMapping("/exportToCsv")
+    public ResponseEntity<byte[]> exportToCsv(
+            @RequestParam String tableName,
+            @RequestParam(defaultValue = "MYSQL") String dataSource) throws IOException {
+        
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        exportService.exportToCsv(tableName, dataSource, outputStream);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        String filename = URLEncoder.encode(tableName + ".csv");
+        headers.setContentDispositionFormData("attachment", filename);
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(outputStream.toByteArray());
     }
 }
