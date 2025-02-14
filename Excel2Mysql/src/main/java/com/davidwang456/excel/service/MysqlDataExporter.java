@@ -12,6 +12,9 @@ public class MysqlDataExporter implements DataExporter {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private DynamicTableService dynamicTableService;
+
     @Override
     public List<Map<String, Object>> exportData(String tableName) {
         // 获取除system_id外的所有列名
@@ -35,5 +38,11 @@ public class MysqlDataExporter implements DataExporter {
     public List<String> getTableList() {
         String sql = "SHOW TABLES";
         return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+    @Override
+    public List<String> getOrderedHeaders(String tableName) {
+        List<String> orderedHeaders = dynamicTableService.getColumnOrder(tableName);
+        return orderedHeaders != null ? orderedHeaders : getHeaders(tableName);
     }
 } 

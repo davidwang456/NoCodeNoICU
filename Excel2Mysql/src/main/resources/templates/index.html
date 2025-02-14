@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>数据导入导出管理</title>
-    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <link rel="stylesheet" href="/css/element-ui.css">
     <style>
         .container {
             padding: 20px;
@@ -82,9 +82,9 @@
         </el-card>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
-    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="/js/vue.min.js"></script>
+    <script src="/js/element-ui.js"></script>
+    <script src="/js/axios.min.js"></script>
     <script>
         new Vue({
             el: '#app',
@@ -137,9 +137,7 @@
                         .then(response => {
                             this.tableData = response.data.content;
                             this.total = response.data.total;
-                            if (this.tableData.length > 0) {
-                                this.tableHeaders = Object.keys(this.tableData[0]);
-                            }
+                            this.tableHeaders = response.data.headers;
                         })
                         .catch(() => {
                             this.$message.error('加载数据失败');

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import com.davidwang456.excel.service.MongoTableService;
 import com.davidwang456.excel.enums.DataSourceType;
+import com.davidwang456.excel.service.DynamicTableService;
 
 public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExcelDataListener.class);
@@ -19,6 +20,8 @@ public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String
     private final MongoTableService mongoService;
     private final DataSourceType dataSource;
     private boolean isFirstRow = true;
+    private List<String> headers = new ArrayList<>();
+    private List<String> orderedHeaders = new ArrayList<>(); // 新增：保存有序的列名
 
     public ExcelDataListener(String tableName, DynamicTableService mysqlService, 
             MongoTableService mongoService, DataSourceType dataSource) {
@@ -79,12 +82,20 @@ public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String
 
     @Override
     public void invokeHeadMap(Map<Integer, String> headMap, AnalysisContext context) {
-        this.headMap = headMap;
+        this.headMap = headMap;  // 保存表头映射
+        // 保持Excel中的列顺序
+        orderedHeaders = new ArrayList<>(headMap.values());
+        
+        // 先创建表/集合
         if (dataSource == DataSourceType.MYSQL || dataSource == DataSourceType.BOTH) {
             mysqlService.createTable(tableName, headMap, dataTypeMap);
+            // 创建表后保存列顺序
+            mysqlService.saveColumnOrder(tableName, orderedHeaders);
         }
         if (dataSource == DataSourceType.MONGODB || dataSource == DataSourceType.BOTH) {
             mongoService.createCollection(tableName);
+            // 创建集合后保存列顺序
+            mongoService.saveColumnOrder(tableName, orderedHeaders);
         }
     }
 

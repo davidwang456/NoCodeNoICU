@@ -1,5 +1,4 @@
-package com.davidwang456.excel;
-
+package com.davidwang456.excel.service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -87,5 +86,40 @@ public class DynamicTableService {
                 .collect(Collectors.joining(","));
         String valuePlaceholders = String.join(",", Collections.nCopies(columns.size(), "?"));
         return String.format("INSERT INTO `%s` (%s) VALUES (%s)", tableName, columnList, valuePlaceholders);
+    }
+
+    @Transactional
+    public void saveColumnOrder(String tableName, List<String> columnOrder) {
+        // 创建元数据表（如果不存在）
+        jdbcTemplate.execute(
+            "CREATE TABLE IF NOT EXISTS table_metadata (" +
+            "table_name VARCHAR(255) PRIMARY KEY," +
+            "column_order TEXT," +
+            "create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+            ")"
+        );
+        
+        // 保存列顺序
+        String orderJson = String.join(",", columnOrder);
+        jdbcTemplate.update(
+            "INSERT INTO table_metadata (table_name, column_order) VALUES (?, ?) " +
+            "ON DUPLICATE KEY UPDATE column_order = ?",
+            tableName, orderJson, orderJson
+        );
+        LOGGER.info("表 {} 的列顺序已保存", tableName);
+    }
+
+    public List<String> getColumnOrder(String tableName) {
+        try {
+            String orderJson = jdbcTemplate.queryForObject(
+                "SELECT column_order FROM table_metadata WHERE table_name = ?",
+                String.class,
+                tableName
+            );
+            return orderJson != null ? Arrays.asList(orderJson.split(",")) : null;
+        } catch (Exception e) {
+            LOGGER.warn("获取表 {} 的列顺序失败: {}", tableName, e.getMessage());
+            return null;
+        }
     }
 } 

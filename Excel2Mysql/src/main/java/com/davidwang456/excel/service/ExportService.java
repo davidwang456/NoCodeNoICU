@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.OutputStream;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ExportService {
@@ -26,16 +27,16 @@ public class ExportService {
     public void exportToExcel(String tableName, String dataSource, OutputStream outputStream) {
         DataExporter exporter = getExporter(dataSource);
         List<Map<String, Object>> data = exporter.exportData(tableName);
-        List<String> headers = exporter.getHeaders(tableName);
+        List<String> orderedHeaders = exporter.getOrderedHeaders(tableName);
 
         // 转换数据格式以适应EasyExcel
         List<List<Object>> rows = new ArrayList<>();
-        rows.add(new ArrayList<>(headers)); // 添加表头
+        rows.add(new ArrayList<>(orderedHeaders)); // 使用有序的表头
 
-        // 添加数据行
+        // 按照有序表头的顺序添加数据
         for (Map<String, Object> row : data) {
             List<Object> rowData = new ArrayList<>();
-            for (String header : headers) {
+            for (String header : orderedHeaders) {
                 rowData.add(row.get(header));
             }
             rows.add(rowData);
@@ -51,17 +52,17 @@ public class ExportService {
     public void exportToCsv(String tableName, String dataSource, OutputStream outputStream) {
         DataExporter exporter = getExporter(dataSource);
         List<Map<String, Object>> data = exporter.exportData(tableName);
-        List<String> headers = exporter.getHeaders(tableName);
+        List<String> orderedHeaders = exporter.getOrderedHeaders(tableName);
 
         try {
-            // 写入CSV头部
-            outputStream.write(String.join(",", headers).getBytes());
+            // 写入CSV头部（保持顺序）
+            outputStream.write(String.join(",", orderedHeaders).getBytes());
             outputStream.write("\n".getBytes());
 
-            // 写入数据行
+            // 按照有序表头的顺序写入数据
             for (Map<String, Object> row : data) {
                 List<String> rowValues = new ArrayList<>();
-                for (String header : headers) {
+                for (String header : orderedHeaders) {
                     Object value = row.get(header);
                     rowValues.add(value != null ? escapeCSVValue(value.toString()) : "");
                 }
@@ -69,7 +70,6 @@ public class ExportService {
                 outputStream.write("\n".getBytes());
             }
         } catch (Exception e) {
-            LOGGER.error("导出CSV失败", e);
             throw new RuntimeException("导出CSV失败", e);
         }
     }
@@ -92,13 +92,26 @@ public class ExportService {
     public Map<String, Object> getPageData(String tableName, String dataSource, int page, int size) {
         DataExporter exporter = getExporter(dataSource);
         List<Map<String, Object>> allData = exporter.exportData(tableName);
+        List<String> orderedHeaders = exporter.getOrderedHeaders(tableName);
         
         int start = (page - 1) * size;
         int end = Math.min(start + size, allData.size());
         
+        // 按照保存的列顺序重新组织数据
+        List<Map<String, Object>> orderedData = allData.subList(start, end).stream()
+            .map(row -> {
+                Map<String, Object> orderedRow = new LinkedHashMap<>();
+                for (String header : orderedHeaders) {
+                    orderedRow.put(header, row.get(header));
+                }
+                return orderedRow;
+            })
+            .collect(Collectors.toList());
+        
         Map<String, Object> result = new HashMap<>();
-        result.put("content", allData.subList(start, end));
+        result.put("content", orderedData);
         result.put("total", allData.size());
+        result.put("headers", orderedHeaders);  // 添加有序的表头信息
         return result;
     }
 } 
