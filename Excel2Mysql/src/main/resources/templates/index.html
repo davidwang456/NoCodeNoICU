@@ -18,6 +18,7 @@
 </head>
 <body>
     <div id="app" class="container">
+        <el-button type="danger" style="float: right; margin-bottom: 20px;" @click="logout">退出登录</el-button>
         <el-card>
             <div slot="header">
                 <span>数据导入</span>
@@ -156,6 +157,9 @@
                 },
                 exportToCsv() {
                     window.location.href = `/exportToCsv?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`;
+                },
+                logout() {
+                    window.location.href = '/logout';
                 }
             }
         });
