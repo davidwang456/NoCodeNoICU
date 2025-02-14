@@ -1,1 +1,33 @@
-<!-- 此文件可以为空，因为内容已经移到 layout.html 中 --> 
+<th:block th:fragment="template">
+    <script type="text/x-template" id="home-template">
+        <el-card>
+            <div slot="header">
+                <span>系统概览</span>
+            </div>
+            <el-row :gutter="20">
+                <el-col :span="12">
+                    <el-card shadow="hover">
+                        <div slot="header">
+                            <span>MySQL 数据资产</span>
+                        </div>
+                        <div>
+                            <p>表数量：{{ mysqlStats.count }}</p>
+                            <p>最近导入：{{ mysqlStats.lastImport || '无' }}</p>
+                        </div>
+                    </el-card>
+                </el-col>
+                <el-col :span="12">
+                    <el-card shadow="hover">
+                        <div slot="header">
+                            <span>MongoDB 数据资产</span>
+                        </div>
+                        <div>
+                            <p>集合数量：{{ mongoStats.count }}</p>
+                            <p>最近导入：{{ mongoStats.lastImport || '无' }}</p>
+                        </div>
+                    </el-card>
+                </el-col>
+            </el-row>
+        </el-card>
+    </script>
+</th:block> 

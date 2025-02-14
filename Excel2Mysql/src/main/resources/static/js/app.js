@@ -172,12 +172,20 @@ const ManagePage = {
             this.currentPage = 1;
             this.loadTableData();
         },
-        handlePageChange(page) {
+        handleCurrentChange(page) {
             this.currentPage = page;
             this.loadTableData();
         },
         exportData() {
             window.open(`/api/export/${this.currentDataSource}/${this.currentTable}`, '_blank');
+        },
+        exportToExcel() {
+            if (!this.currentTable) return;
+            window.open(`/api/excel/exportToExcel/${this.currentDataSource}/${this.currentTable}`, '_blank');
+        },
+        exportToCsv() {
+            if (!this.currentTable) return;
+            window.open(`/api/excel/exportToCsv/${this.currentDataSource}/${this.currentTable}`, '_blank');
         }
     }
 };
@@ -188,23 +196,19 @@ const HomePage = {
     data() {
         return {
             mysqlStats: {
-                tableCount: 0,
-                tables: []
+                count: 0,
+                lastImport: null
             },
             mongoStats: {
-                collectionCount: 0,
-                collections: []
+                count: 0,
+                lastImport: null
             },
             loading: true
         }
     },
     created() {
         console.log('HomePage component created');
-        console.log('Template content:', document.getElementById('home-template').innerHTML);
         this.loadStats();
-    },
-    mounted() {
-        console.log('HomePage component mounted');
     },
     methods: {
         loadStats() {
@@ -224,12 +228,12 @@ const HomePage = {
                 console.log('MySQL response:', mysqlResponse.data);
                 console.log('MongoDB response:', mongoResponse.data);
                 this.mysqlStats = {
-                    tableCount: mysqlResponse.data.count,
-                    tables: mysqlResponse.data.tables
+                    count: mysqlResponse.data.count,
+                    lastImport: mysqlResponse.data.lastImport
                 };
                 this.mongoStats = {
-                    collectionCount: mongoResponse.data.count,
-                    collections: mongoResponse.data.tables
+                    count: mongoResponse.data.count,
+                    lastImport: mongoResponse.data.lastImport
                 };
             })
             .catch(error => {
@@ -245,12 +249,19 @@ const HomePage = {
 
 // 路由配置
 const router = new VueRouter({
+    mode: 'history',  // 使用 HTML5 history 模式
     routes: [
         { path: '/', redirect: '/home' },
         { path: '/home', component: HomePage },
         { path: '/import', component: ImportPage },
         { path: '/manage', component: ManagePage }
     ]
+});
+
+// 添加全局导航守卫
+router.beforeEach((to, from, next) => {
+    console.log('Route change:', from.path, '->', to.path);
+    next();
 });
 
 // 创建 Vue 实例
