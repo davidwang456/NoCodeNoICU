@@ -1,15 +1,5 @@
 package com.davidwang456.excel.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import com.davidwang456.excel.enums.DataSourceType;
-import com.davidwang456.excel.model.PreviewData;
-import com.davidwang456.excel.model.PreviewResult;
-import com.davidwang456.excel.service.preview.CsvPreviewReader;
-import com.davidwang456.excel.service.preview.ExcelPreviewReader;
-import com.davidwang456.excel.util.PinyinUtil;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +9,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.davidwang456.excel.enums.DataSourceType;
+import com.davidwang456.excel.model.PreviewData;
+import com.davidwang456.excel.model.PreviewResult;
+import com.davidwang456.excel.service.preview.CsvPreviewReader;
+import com.davidwang456.excel.service.preview.ExcelPreviewReader;
+import com.davidwang456.excel.util.PinyinUtil;
 
 @Service
 public class PreviewService {
@@ -57,7 +57,8 @@ public class PreviewService {
         return new PreviewResult(headers, 
             data.subList(0, Math.min(10, data.size())), 
             data.size(),
-            fileId);  // 返回文件标识符
+            fileId,
+            originalFileName);  // 返回文件标识符
     }
     
     public Map<String, Object> getPreviewData(String fileName, int page, int size) {
@@ -183,6 +184,67 @@ public class PreviewService {
                 }
                 return "VARCHAR(255)";
             }
+        }
+    }
+
+    // 获取预览数据但不删除
+    public PreviewResult getPreviewResult(String fileId) {
+        PreviewData previewData = previewCache.get(fileId);
+        if (previewData == null) {
+            return null;
+        }
+        
+        return new PreviewResult(
+            previewData.getHeaders(),
+            previewData.getData(),
+            previewData.getData().size(),
+            fileId,
+            PinyinUtil.toPinyin(
+                previewData.getOriginalFileName().substring(0, 
+                previewData.getOriginalFileName().lastIndexOf(".")))
+                .toLowerCase()  // 使用原始文件名生成表名
+        );
+    }
+
+    // 使用指定的预览数据进行导入
+    public void importDataWithPreview(PreviewResult previewData, String dataSource) {
+        if (previewData == null) {
+            throw new IllegalStateException("预览数据不存在");
+        }
+
+        String tableName = previewData.getTableName();
+        List<String> headers = previewData.getHeaders();
+        List<Map<String, Object>> content = previewData.getContent();
+
+        try {
+            // 构建表头映射
+            Map<Integer, String> headMap = new HashMap<>();
+            for (int i = 0; i < headers.size(); i++) {
+                headMap.put(i, headers.get(i));
+            }
+
+            // 构建数据
+            List<Map<Integer, String>> dataList = new ArrayList<>();
+            for (Map<String, Object> row : content) {
+                Map<Integer, String> dataRow = new HashMap<>();
+                int i = 0;
+                for (String header : headers) {
+                    Object value = row.get(header);
+                    dataRow.put(i++, value != null ? value.toString() : null);
+                }
+                dataList.add(dataRow);
+            }
+
+            // 执行导入
+            if ("MYSQL".equals(dataSource)) {
+                dynamicTableService.createTable(tableName, headMap, inferDataTypes(dataList.get(0)));
+                dynamicTableService.batchInsertData(tableName, headMap, dataList);
+            } else if ("MONGODB".equals(dataSource)) {
+                mongoTableService.createCollection(tableName);
+                mongoTableService.batchInsertData(tableName, headMap, dataList);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("导入数据失败: " + e.getMessage(), e);
         }
     }
 } 

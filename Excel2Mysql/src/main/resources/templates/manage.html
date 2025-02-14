@@ -1,0 +1,43 @@
+<template id="manage-template">
+    <el-card>
+        <div slot="header">
+            <span>数据管理</span>
+        </div>
+        <div class="table-operations">
+            <el-radio-group v-model="currentDataSource" @change="handleDataSourceChange">
+                <el-radio label="MYSQL">MySQL</el-radio>
+                <el-radio label="MONGODB">MongoDB</el-radio>
+            </el-radio-group>
+            <el-select v-model="currentTable" placeholder="请选择表" @change="loadTableData">
+                <el-option
+                    v-for="table in tables"
+                    :key="table"
+                    :label="table"
+                    :value="table">
+                </el-option>
+            </el-select>
+            <el-button type="success" @click="exportToExcel" :disabled="!currentTable">导出Excel</el-button>
+            <el-button type="success" @click="exportToCsv" :disabled="!currentTable">导出CSV</el-button>
+        </div>
+        
+        <el-table
+            v-loading="loading"
+            :data="tableData"
+            border
+            style="width: 100%">
+            <el-table-column
+                v-for="header in tableHeaders"
+                :key="header"
+                :prop="header"
+                :label="header">
+            </el-table-column>
+        </el-table>
+        <el-pagination
+            @current-change="handleCurrentChange"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            :total="total"
+            layout="total, prev, pager, next">
+        </el-pagination>
+    </el-card>
+</template> 

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>数据管理系统</title>
+    <link rel="icon" href="data:;base64,=">
+    <link rel="stylesheet" href="/css/element-ui.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        .app-container {
+            height: 100vh;
+            display: flex;
+        }
+        .sidebar {
+            width: 200px;
+            background-color: #304156;
+            color: white;
+        }
+        .main-container {
+            flex: 1;
+            padding: 20px;
+            background-color: #f0f2f5;
+            overflow-y: auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            height: 50px;
+            background-color: white;
+            box-shadow: 0 1px 4px rgba(0,21,41,.08);
+            margin-bottom: 20px;
+        }
+        .el-menu {
+            border-right: none;
+        }
+        .dashboard {
+            padding: 20px;
+        }
+        .overview-card {
+            margin-bottom: 20px;
+        }
+        .overview-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+        }
+        .stat-item i {
+            font-size: 48px;
+            margin-right: 20px;
+            color: #409EFF;
+        }
+        .stat-info {
+            flex: 1;
+        }
+        .stat-number {
+            font-size: 36px;
+            font-weight: bold;
+            line-height: 1;
+            margin-bottom: 10px;
+        }
+        .stat-label {
+            font-size: 16px;
+            opacity: 0.8;
+        }
+        .nav-card {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .nav-card:hover {
+            transform: translateY(-5px);
+        }
+        .nav-content {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+        }
+        .nav-arrow {
+            font-size: 24px;
+            color: #C0C4CC;
+            transition: all 0.3s;
+        }
+        .nav-card:hover .nav-arrow {
+            color: #409EFF;
+            transform: translateX(5px);
+        }
+        
+        /* 导入页面样式 */
+        .import-container {
+            padding: 20px;
+        }
+        .import-card {
+            margin-bottom: 20px;
+        }
+        .preview-card {
+            margin-top: 20px;
+        }
+        
+        /* 管理页面样式 */
+        .manage-container {
+            padding: 20px;
+        }
+        .pagination-container {
+            margin-top: 20px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="app-container">
+        <div class="sidebar">
+            <el-menu
+                :default-active="activeMenu"
+                background-color="#304156"
+                text-color="#fff"
+                active-text-color="#409EFF"
+                router>
+                <el-menu-item index="/home">
+                    <i class="el-icon-s-home"></i>
+                    <span>首页</span>
+                </el-menu-item>
+                <el-menu-item index="/import">
+                    <i class="el-icon-upload"></i>
+                    <span>数据导入</span>
+                </el-menu-item>
+                <el-menu-item index="/manage">
+                    <i class="el-icon-s-data"></i>
+                    <span>数据管理</span>
+                </el-menu-item>
+            </el-menu>
+        </div>
+        
+        <div class="main-container">
+            <div class="header">
+                <h2>{{pageTitle}}</h2>
+                <el-button type="danger" @click="logout">退出登录</el-button>
+            </div>
+            <router-view></router-view>
+        </div>
+    </div>
+
+    <!-- 引入模板 -->
+    <script type="text/x-template" id="home-template">
+        <div class="dashboard" v-loading="loading">
+            <!-- 快速导航卡片 -->
+            <el-row :gutter="20">
+                <el-col :span="12">
+                    <el-card class="nav-card" shadow="hover" @click.native="$router.push('/import')">
+                        <div class="nav-content">
+                            <i class="el-icon-upload"></i>
+                            <div class="nav-info">
+                                <div class="nav-title">数据导入</div>
+                                <div class="nav-desc">支持Excel、CSV文件导入到MySQL或MongoDB</div>
+                            </div>
+                            <i class="el-icon-arrow-right nav-arrow"></i>
+                        </div>
+                    </el-card>
+                </el-col>
+                <el-col :span="12">
+                    <el-card class="nav-card" shadow="hover" @click.native="$router.push('/manage')">
+                        <div class="nav-content">
+                            <i class="el-icon-s-data"></i>
+                            <div class="nav-info">
+                                <div class="nav-title">数据管理</div>
+                                <div class="nav-desc">查看和导出数据表内容</div>
+                            </div>
+                            <i class="el-icon-arrow-right nav-arrow"></i>
+                        </div>
+                    </el-card>
+                </el-col>
+            </el-row>
+
+            <!-- 数据统计卡片 -->
+            <el-row :gutter="20" style="margin-top: 20px;">
+                <el-col :span="12">
+                    <el-card>
+                        <div class="stat-item">
+                            <i class="el-icon-s-platform"></i>
+                            <div class="stat-info">
+                                <div class="stat-number">{{mysqlStats.tableCount}}</div>
+                                <div class="stat-label">MySQL数据表</div>
+                            </div>
+                        </div>
+                    </el-card>
+                </el-col>
+                <el-col :span="12">
+                    <el-card>
+                        <div class="stat-item">
+                            <i class="el-icon-s-management"></i>
+                            <div class="stat-info">
+                                <div class="stat-number">{{mongoStats.collectionCount}}</div>
+                                <div class="stat-label">MongoDB集合</div>
+                            </div>
+                        </div>
+                    </el-card>
+                </el-col>
+            </el-row>
+        </div>
+    </script>
+    <script type="text/x-template" id="import-template">
+        <div class="import-container" v-loading="importing">
+            <el-card class="import-card">
+                <div slot="header">
+                    <span>选择导入目标</span>
+                </div>
+                <el-form :model="uploadData" label-width="100px">
+                    <el-form-item label="数据源">
+                        <el-radio-group v-model="uploadData.dataSource">
+                            <el-radio label="MYSQL">MySQL</el-radio>
+                            <el-radio label="MONGODB">MongoDB</el-radio>
+                            <el-radio label="BOTH">MySQL & MongoDB</el-radio>
+                        </el-radio-group>
+                    </el-form-item>
+                    <el-form-item label="选择文件">
+                        <el-upload
+                            ref="upload"
+                            action="#"
+                            :auto-upload="false"
+                            :on-change="handleFileChange"
+                            :before-upload="beforeUpload"
+                            accept=".xlsx,.xls,.csv">
+                            <el-button slot="trigger" type="primary">选择文件</el-button>
+                            <div slot="tip" class="el-upload__tip">只能上传 excel/csv 文件</div>
+                        </el-upload>
+                    </el-form-item>
+                </el-form>
+            </el-card>
+
+            <!-- 预览数据 -->
+            <el-card class="preview-card" v-if="previewData.length > 0">
+                <div slot="header">
+                    <span>数据预览</span>
+                    <el-button style="float: right" type="primary" @click="handleImport" :loading="importing">
+                        确认导入
+                    </el-button>
+                </div>
+                <el-table
+                    :data="previewData"
+                    style="width: 100%"
+                    v-loading="previewLoading"
+                    max-height="400">
+                    <el-table-column
+                        v-for="header in previewHeaders"
+                        :key="header"
+                        :prop="header"
+                        :label="header">
+                    </el-table-column>
+                </el-table>
+            </el-card>
+        </div>
+    </script>
+    <script type="text/x-template" id="manage-template">
+        <div class="manage-container">
+            <el-card>
+                <div slot="header">
+                    <el-form :inline="true">
+                        <el-form-item label="数据源">
+                            <el-radio-group v-model="currentDataSource" @change="handleDataSourceChange">
+                                <el-radio label="MYSQL">MySQL</el-radio>
+                                <el-radio label="MONGODB">MongoDB</el-radio>
+                            </el-radio-group>
+                        </el-form-item>
+                        <el-form-item label="选择表">
+                            <el-select v-model="currentTable" @change="handleTableChange" :loading="loading">
+                                <el-option
+                                    v-for="table in tables"
+                                    :key="table"
+                                    :label="table"
+                                    :value="table">
+                                </el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-button type="primary" @click="exportData" :disabled="!currentTable">
+                                导出数据
+                            </el-button>
+                        </el-form-item>
+                    </el-form>
+                </div>
+                
+                <el-table
+                    :data="tableData"
+                    style="width: 100%"
+                    v-loading="loading"
+                    max-height="500">
+                    <el-table-column
+                        v-for="header in tableHeaders"
+                        :key="header"
+                        :prop="header"
+                        :label="header">
+                    </el-table-column>
+                </el-table>
+                
+                <div class="pagination-container">
+                    <el-pagination
+                        @current-change="handlePageChange"
+                        :current-page="currentPage"
+                        :page-size="pageSize"
+                        :total="total"
+                        layout="total, prev, pager, next">
+                    </el-pagination>
+                </div>
+            </el-card>
+        </div>
+    </script>
+
+    <!-- 引入 JS 文件 -->
+    <script src="/js/vue.min.js"></script>
+    <script src="/js/vue-router.min.js"></script>
+    <script src="/js/element-ui.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html> 

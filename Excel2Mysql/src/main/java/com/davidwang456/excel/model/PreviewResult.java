@@ -8,12 +8,14 @@ public class PreviewResult {
     private List<Map<String, Object>> content;
     private int total;
     private String fileId;
+    private String tableName;
 
-    public PreviewResult(List<String> headers, List<Map<String, Object>> content, int total, String fileId) {
+    public PreviewResult(List<String> headers, List<Map<String, Object>> content, int total, String fileId,String tableName) {
         this.headers = headers;
         this.content = content;
         this.total = total;
         this.fileId = fileId;
+        this.setTableName(tableName);
     }
 
     public List<String> getHeaders() {
@@ -31,4 +33,12 @@ public class PreviewResult {
     public String getFileId() {
         return fileId;
     }
+
+	public String getTableName() {
+		return tableName;
+	}
+
+	public void setTableName(String tableName) {
+		this.tableName = tableName;
+	}
 } 

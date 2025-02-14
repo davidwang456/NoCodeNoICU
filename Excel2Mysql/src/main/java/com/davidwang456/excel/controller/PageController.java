@@ -16,7 +16,7 @@ public class PageController {
 
     @GetMapping("/")
     public String root() {
-        return "redirect:/index";
+        return "redirect:/home";
     }
 
     @GetMapping("/login")
@@ -24,12 +24,12 @@ public class PageController {
         return "login";
     }
 
-    @GetMapping("/index")
+    @GetMapping("/home")
     public String index(HttpSession session) {
         if (session.getAttribute("user") == null) {
             return "redirect:/login";
         }
-        return "index";
+        return "layout";
     }
 
     @PostMapping("/login")

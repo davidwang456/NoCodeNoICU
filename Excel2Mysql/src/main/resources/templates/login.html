@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>登录</title>
+    <link rel="icon" href="data:;base64,=">
     <link rel="stylesheet" href="/css/element-ui.css">
     <script src="/js/md5.min.js"></script>
     <style>
@@ -79,7 +80,7 @@
                             axios.post('/login', loginData)
                                 .then(response => {
                                     if (response.data.success) {
-                                        window.location.href = '/index';
+                                        window.location.href = '/home';
                                     } else {
                                         this.$message.error(response.data.message);
                                     }

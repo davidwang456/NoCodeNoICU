@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,6 +42,7 @@ import io.swagger.annotations.ApiOperation;
 
 @Api(tags = "Excel动态表管理")
 @RestController
+@RequestMapping("/api/excel")
 public class ExcelController {
     @Autowired
     private DynamicTableService dynamicTableService;
@@ -150,7 +152,7 @@ public class ExcelController {
         return exportService.getPageData(tableName, dataSource, page, size);
     }
 
-    @PostMapping("/previewFile")
+    @PostMapping("/preview")
     public ResponseEntity<?> previewFile(@RequestParam("file") MultipartFile file) throws IOException {
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null) {
@@ -188,7 +190,22 @@ public class ExcelController {
     public ResponseEntity<?> confirmImport(@RequestBody ImportConfirmRequest request) {
         System.out.println("Received import request: " + request);
         try {
-            previewService.importData(request.getFileName(), request.getDataSource());
+            if ("BOTH".equals(request.getDataSource())) {
+                // 同时导入到 MySQL 和 MongoDB，先获取预览数据的副本
+                PreviewResult previewData = previewService.getPreviewResult(request.getFileName());
+                if (previewData == null) {
+                    throw new IllegalStateException("预览数据不存在，fileId: " + request.getFileName());
+                }
+                
+                // 使用同一份预览数据进行两次导入
+                previewService.importDataWithPreview(previewData, "MYSQL");
+                previewService.importDataWithPreview(previewData, "MONGODB");
+                
+                // 最后清理预览数据
+                previewService.cancelImport(request.getFileName());
+            } else {
+                previewService.importData(request.getFileName(), request.getDataSource());
+            }
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             System.err.println("Import failed: " + e.getMessage());
