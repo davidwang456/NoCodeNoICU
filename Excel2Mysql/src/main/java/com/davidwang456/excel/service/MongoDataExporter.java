@@ -86,14 +86,4 @@ public class MongoDataExporter implements DataExporter {
         // 如果没有保存的顺序，则从实际数据中获取
         return getHeaders(tableName);
     }
-
-    private Map<String, Object> removeSystemFields(Map<?, ?> document) {
-        Map<String, Object> result = new LinkedHashMap<>();  // 改用 LinkedHashMap
-        document.forEach((key, value) -> {
-            if (key instanceof String && !key.equals("_id")) {
-                result.put((String) key, value);
-            }
-        });
-        return result;
-    }
 } 
