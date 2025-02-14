@@ -5,6 +5,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.bson.Document;
 
 @Service
 public class MongoDataExporter implements DataExporter {
@@ -17,30 +18,54 @@ public class MongoDataExporter implements DataExporter {
 
     @Override
     public List<Map<String, Object>> exportData(String tableName) {
-        List<Map> rawData = mongoTemplate.findAll(Map.class, tableName);
-        List<String> orderedHeaders = getOrderedHeaders(tableName);
-        
-        return rawData.stream()
-                .map(doc -> {
-                    // 使用 LinkedHashMap 保持字段顺序
-                    Map<String, Object> orderedData = new LinkedHashMap<>();
-                    // 按照保存的列顺序添加字段
-                    for (String header : orderedHeaders) {
-                        String formattedHeader = mongoTableService.formatFieldName(header);
-                        orderedData.put(header, doc.get(formattedHeader));
-                    }
-                    return orderedData;
-                })
-                .collect(Collectors.toList());
+        try {
+            // 先获取有序的表头
+            List<String> orderedHeaders = getOrderedHeaders(tableName);
+            if (orderedHeaders.isEmpty()) {
+                System.out.println("未找到表 " + tableName + " 的列信息");
+                return new ArrayList<>();
+            }
+
+            // 使用 Document 类型来获取数据
+            List<Document> rawData = mongoTemplate.findAll(Document.class, tableName);
+            
+            return rawData.stream()
+                    .map(doc -> {
+                        Map<String, Object> orderedData = new LinkedHashMap<>();
+                        for (String header : orderedHeaders) {
+                            String formattedHeader = mongoTableService.formatFieldName(header);
+                            orderedData.put(header, doc.get(formattedHeader));
+                        }
+                        return orderedData;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.out.println("从MongoDB导出数据失败: " + e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     @Override
     public List<String> getHeaders(String tableName) {
-        List<Map<String, Object>> data = exportData(tableName);
-        if (data.isEmpty()) {
+        try {
+            // 直接从MongoDB获取第一条记录来确定字段
+            Document firstDoc = mongoTemplate.findOne(
+                new org.springframework.data.mongodb.core.query.Query(), 
+                Document.class, 
+                tableName
+            );
+            
+            if (firstDoc == null) {
+                return new ArrayList<>();
+            }
+
+            // 移除 _id 字段
+            firstDoc.remove("_id");
+            return new ArrayList<>(firstDoc.keySet());
+        } catch (Exception e) {
+            System.out.println("获取MongoDB表头失败: " + e.getMessage());
             return new ArrayList<>();
         }
-        return new ArrayList<>(data.get(0).keySet());
     }
 
     @Override
@@ -52,8 +77,14 @@ public class MongoDataExporter implements DataExporter {
 
     @Override
     public List<String> getOrderedHeaders(String tableName) {
+        // 优先从保存的元数据中获取列顺序
         List<String> orderedHeaders = mongoTableService.getColumnOrder(tableName);
-        return orderedHeaders != null ? orderedHeaders : getHeaders(tableName);
+        if (orderedHeaders != null && !orderedHeaders.isEmpty()) {
+            return orderedHeaders;
+        }
+        
+        // 如果没有保存的顺序，则从实际数据中获取
+        return getHeaders(tableName);
     }
 
     private Map<String, Object> removeSystemFields(Map<?, ?> document) {
