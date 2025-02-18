@@ -158,6 +158,15 @@ const ManagePage = {
             axios.get(`/api/excel/tables?dataSource=${this.currentDataSource}`)
                 .then(response => {
                     this.tables = response.data;
+                    // 清空当前表和数据
+                    this.currentTable = '';
+                    this.tableData = [];
+                    this.tableHeaders = [];
+                    // 只有在确认有表存在的情况下才选择第一个表并加载数据
+                    if (this.tables && this.tables.length > 0) {
+                        this.currentTable = this.tables[0];
+                        this.loadTableData();
+                    }
                 })
                 .catch(() => {
                     this.$message.error('获取表列表失败');
