@@ -39,7 +39,7 @@ const ImportPage = {
                     this.previewLoading = false;
                 });
         },
-        handleImport() {
+        confirmImport() {
             if (!this.previewFileName || !this.fileId) {
                 this.$message.warning('请先选择文件');
                 return;
@@ -53,139 +53,37 @@ const ImportPage = {
             
             axios.post('/api/excel/confirmImport', data)
                 .then(() => {
-                    let successMsg = '导入成功';
-                    if (this.uploadData.dataSource === 'BOTH') {
-                        successMsg = '已同时导入到 MySQL 和 MongoDB';
-                    }
-                    this.$message.success(successMsg);
-                    this.resetImport();
+                    this.$message.success('导入成功');
+                    this.resetForm();
                 })
-                .catch((error) => {
-                    console.error('Import error:', error);
+                .catch(() => {
                     this.$message.error('导入失败');
                 })
                 .finally(() => {
                     this.importing = false;
                 });
         },
-        resetImport() {
+        cancelImport() {
+            if (this.previewFileName) {
+                axios.post('/api/excel/cancelImport', {
+                    fileName: this.previewFileName
+                })
+                .then(() => {
+                    this.resetForm();
+                })
+                .catch(error => {
+                    console.error('取消导入失败：', error);
+                });
+            }
+            this.resetForm();
+        },
+        resetForm() {
             this.previewData = [];
             this.previewHeaders = [];
             this.previewTotal = 0;
             this.previewFileName = '';
             this.fileId = '';
-            this.$refs.upload.clearFiles();
-        },
-        beforeUpload() {
-            return false;
-        }
-    }
-};
-
-// 管理页面组件
-const ManagePage = {
-    template: '#manage-template',
-    data() {
-        return {
-            currentDataSource: 'MYSQL',
-            currentTable: '',
-            tables: [],
-            tableData: [],
-            tableHeaders: [],
-            loading: false,
-            currentPage: 1,
-            pageSize: 10,
-            total: 0
-        }
-    },
-    created() {
-        this.loadTables();
-    },
-    methods: {
-        loadTables() {
-            this.loading = true;
-            // 使用 StatsController 中的 API
-            if (this.currentDataSource === 'MYSQL') {
-                axios.get('/api/dashboard/mysql-stats')
-                    .then(response => {
-                        this.tables = response.data.tables;
-                        if (this.tables.length > 0) {
-                            this.currentTable = this.tables[0];
-                            this.loadTableData();
-                        }
-                    })
-                    .catch(() => {
-                        this.$message.error('加载表格列表失败');
-                    })
-                    .finally(() => {
-                        this.loading = false;
-                    });
-            } else {
-                axios.get('/api/dashboard/mongodb-stats')
-                    .then(response => {
-                        this.tables = response.data.tables;
-                        if (this.tables.length > 0) {
-                            this.currentTable = this.tables[0];
-                            this.loadTableData();
-                        }
-                    })
-                    .catch(() => {
-                        this.$message.error('加载表格列表失败');
-                    })
-                    .finally(() => {
-                        this.loading = false;
-                    });
-            }
-        },
-        loadTableData() {
-            if (!this.currentTable) return;
-            
-            this.loading = true;
-            const dataSource = this.currentDataSource.toLowerCase();
-            axios.get(`/api/dashboard/${dataSource}-data/${this.currentTable}`, {
-                params: {
-                    page: this.currentPage,
-                    size: this.pageSize
-                }
-            })
-                .then(response => {
-                    this.tableData = response.data.content;
-                    this.total = response.data.total;
-                    if (response.data.headers) {
-                        this.tableHeaders = response.data.headers;
-                    }
-                })
-                .catch(() => {
-                    this.$message.error('加载数据失败');
-                })
-                .finally(() => {
-                    this.loading = false;
-                });
-        },
-        handleDataSourceChange() {
-            this.currentTable = '';
-            this.tableData = [];
-            this.tableHeaders = [];
-            this.loadTables();
-        },
-        handleTableChange() {
-            this.currentPage = 1;
-            this.loadTableData();
-        },
-        handleCurrentChange(page) {
-            this.currentPage = page;
-            this.loadTableData();
-        },
-        exportData() {
-            window.open(`/api/export/${this.currentDataSource}/${this.currentTable}`, '_blank');
-        },
-        exportToExcel() {
-            if (!this.currentTable) return;
-            window.open(`/api/excel/exportToExcel/${this.currentDataSource}/${this.currentTable}`, '_blank');
-        },
-        exportToCsv() {
-            if (!this.currentTable) return;
-            window.open(`/api/excel/exportToCsv/${this.currentDataSource}/${this.currentTable}`, '_blank');
+            this.importing = false;
         }
     }
 };
@@ -202,102 +100,163 @@ const HomePage = {
             mongoStats: {
                 count: 0,
                 lastImport: null
-            },
-            loading: true
+            }
         }
     },
     created() {
-        console.log('HomePage component created');
-        this.loadStats();
+        this.fetchStats();
     },
     methods: {
-        loadStats() {
-            console.log('Loading stats...');
-            this.loading = true;
-            Promise.all([
-                axios.get('/api/dashboard/mysql-stats').catch(err => {
-                    console.error('MySQL stats error:', err);
-                    return { data: { count: 0, tables: [] } };
-                }),
-                axios.get('/api/dashboard/mongodb-stats').catch(err => {
-                    console.error('MongoDB stats error:', err);
-                    return { data: { count: 0, tables: [] } };
+        fetchStats() {
+            axios.get('/api/stats/mysql')
+                .then(response => {
+                    this.mysqlStats = response.data;
                 })
-            ])
-            .then(([mysqlResponse, mongoResponse]) => {
-                console.log('MySQL response:', mysqlResponse.data);
-                console.log('MongoDB response:', mongoResponse.data);
-                this.mysqlStats = {
-                    count: mysqlResponse.data.count,
-                    lastImport: mysqlResponse.data.lastImport
-                };
-                this.mongoStats = {
-                    count: mongoResponse.data.count,
-                    lastImport: mongoResponse.data.lastImport
-                };
-            })
-            .catch(error => {
-                console.error('Error loading stats:', error);
-                this.$message.error('加载统计信息失败');
-            })
-            .finally(() => {
-                this.loading = false;
-            });
+                .catch(() => {
+                    this.$message.error('获取MySQL统计信息失败');
+                });
+
+            axios.get('/api/stats/mongodb')
+                .then(response => {
+                    this.mongoStats = response.data;
+                })
+                .catch(() => {
+                    this.$message.error('获取MongoDB统计信息失败');
+                });
+        }
+    }
+};
+// 数据管理页面组件
+const ManagePage = {
+    template: '#manage-template',
+    data() {
+        return {
+            currentDataSource: 'MYSQL',
+            currentTable: '',
+            tables: [],
+            tableData: [],
+            tableHeaders: [],
+            loading: false,
+            currentPage: 1,
+            pageSize: 10,
+            total: 0,
+            editDialogVisible: false,
+            editForm: {}
+        }
+    },
+    created() {
+        this.fetchTableList();
+    },
+    methods: {
+        handleDataSourceChange() {
+            this.currentTable = '';
+            this.tableData = [];
+            this.tableHeaders = [];
+            this.fetchTableList();
+        },
+        fetchTableList() {
+            axios.get(`/api/excel/tables?dataSource=${this.currentDataSource}`)
+                .then(response => {
+                    this.tables = response.data;
+                })
+                .catch(() => {
+                    this.$message.error('获取表列表失败');
+                });
+        },
+        loadTableData() {
+            if (!this.currentTable) return;
+            
+            this.loading = true;
+            axios.get(`/api/excel/data?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`)
+                .then(response => {
+                    this.tableData = response.data.content;
+                    this.tableHeaders = response.data.headers;
+                    this.total = response.data.total;
+                })
+                .catch(() => {
+                    this.$message.error('加载数据失败');
+                })
+                .finally(() => {
+                    this.loading = false;
+                });
+        },
+        handleCurrentChange(page) {
+            this.currentPage = page;
+            this.loadTableData();
+        },
+        handleEdit(row) {
+            this.editForm = { ...row };
+            this.editDialogVisible = true;
+        },
+        confirmEdit() {
+            axios.put(`/api/dashboard/upd?${this.currentTable}&dataSource=${this.currentDataSource}`, this.editForm)
+                .then(() => {
+                    this.$message.success('修改成功');
+                    this.editDialogVisible = false;
+                    this.loadTableData();
+                })
+                .catch(() => {
+                    this.$message.error('修改失败');
+                });
+        },
+        handleDelete(row) {
+            this.$confirm('确认删除该条数据?', '提示', {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(() => {
+                axios.delete(`/api/dashboard/del?${this.currentTable}&${row.id}&dataSource=${this.currentDataSource}`)
+                    .then(() => {
+                        this.$message.success('删除成功');
+                        this.loadTableData();
+                    })
+                    .catch(() => {
+                        this.$message.error('删除失败');
+                    });
+            }).catch(() => {});
+        },
+        exportToExcel() {
+            window.location.href = `/api/excel/exportToExcel?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`;
+        },
+        exportToCsv() {
+            window.location.href = `/api/excel/exportToCsv?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`;
         }
     }
 };
 
-// 路由配置
+// 注册路由
+const routes = [
+    { path: '/', redirect: '/home' },
+    { path: '/home', component: HomePage },
+    { path: '/import', component: ImportPage },
+    { path: '/manage', component: ManagePage }
+];
+
 const router = new VueRouter({
-    mode: 'history',  // 使用 HTML5 history 模式
-    routes: [
-        { path: '/', redirect: '/home' },
-        { path: '/home', component: HomePage },
-        { path: '/import', component: ImportPage },
-        { path: '/manage', component: ManagePage }
-    ]
+    routes
 });
 
-// 添加全局导航守卫
-router.beforeEach((to, from, next) => {
-    console.log('Route change:', from.path, '->', to.path);
-    next();
-});
-
-// 创建 Vue 实例
+// 创建Vue实例
 new Vue({
     el: '#app',
     router,
     data: {
         activeMenu: '/home'
     },
-    computed: {
-        pageTitle() {
-            const route = this.$route.path;
-            switch (route) {
-                case '/home':
-                    return '首页';
-                case '/import':
-                    return '数据导入';
-                case '/manage':
-                    return '数据管理';
-                default:
-                    return '';
-            }
-        }
-    },
     methods: {
         logout() {
-            window.location.href = '/logout';
+            axios.post('/api/auth/logout')
+                .then(() => {
+                    window.location.href = '/login';
+                })
+                .catch(() => {
+                    this.$message.error('退出失败');
+                });
         }
     },
     watch: {
         '$route'(to) {
             this.activeMenu = to.path;
-            console.log('Route changed to:', to.path);
         }
-    },
-    mounted() {
-        console.log('Vue app mounted');
     }
-}); 
+});

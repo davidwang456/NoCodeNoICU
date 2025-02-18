@@ -5,10 +5,10 @@
         </div>
         <el-form :model="uploadData" label-width="100px">
             <el-form-item label="数据源">
-                <el-radio-group v-model="uploadData.dataSource">
-                    <el-radio label="MYSQL">MySQL</el-radio>
-                    <el-radio label="MONGODB">MongoDB</el-radio>
-                    <el-radio label="BOTH">MySQL & MongoDB</el-radio>
+                <el-radio-group v-model="uploadData.dataSource" class="custom-radio-group" role="radiogroup">
+                    <el-radio label="MYSQL" class="custom-radio" role="radio" aria-label="选择MySQL数据源">MySQL</el-radio>
+                    <el-radio label="MONGODB" class="custom-radio" role="radio" aria-label="选择MongoDB数据源">MongoDB</el-radio>
+                    <el-radio label="BOTH" class="custom-radio" role="radio" aria-label="选择MySQL和MongoDB数据源">MySQL & MongoDB</el-radio>
                 </el-radio-group>
             </el-form-item>
             
@@ -48,4 +48,22 @@
             </div>
         </div>
     </el-card>
-</template> 
+</template>
+
+<style>
+.custom-radio-group .custom-radio .el-radio__input .el-radio__original {
+    position: absolute;
+    opacity: 0;
+    outline: none;
+    z-index: -1;
+}
+
+.custom-radio-group .custom-radio .el-radio__input {
+    outline: none;
+    position: relative;
+}
+
+.custom-radio-group .custom-radio .el-radio__label {
+    padding-left: 10px;
+}
+</style>

@@ -122,4 +122,52 @@ public class DynamicTableService {
             return null;
         }
     }
+
+    public void deleteData(String tableName, String id) {
+        // 获取表的所有列名
+        List<String> columnOrder = getColumnOrder(tableName);
+        if (columnOrder == null || columnOrder.isEmpty()) {
+            throw new RuntimeException("未找到表的列顺序信息");
+        }
+
+        // 找到第一个非system_id的列名
+        String firstColumn = columnOrder.stream()
+                .filter(col -> !"system_id".equals(col))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("未找到可用的查询列"));
+
+        // 使用第一个非系统列进行查询和删除
+        String sql = "DELETE FROM " + tableName + " WHERE " + firstColumn + " = ? LIMIT 1";
+        jdbcTemplate.update(sql, id);
+    }
+
+    public void updateData(String tableName, String id, Map<String, Object> data) {
+        // 获取表的所有列名
+        List<String> columnOrder = getColumnOrder(tableName);
+        if (columnOrder == null || columnOrder.isEmpty()) {
+            throw new RuntimeException("未找到表的列顺序信息");
+        }
+
+        // 找到第一个非system_id的列名
+        String firstColumn = columnOrder.stream()
+                .filter(col -> !"system_id".equals(col))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("未找到可用的查询列"));
+
+        StringBuilder sql = new StringBuilder("UPDATE " + tableName + " SET ");
+        List<Object> params = new ArrayList<>();
+        
+        // 构建更新字段
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            if (!"system_id".equals(entry.getKey())) {
+                sql.append(entry.getKey()).append(" = ?, ");
+                params.add(entry.getValue());
+            }
+        }
+        sql.setLength(sql.length() - 2);  // 移除最后的逗号和空格
+        sql.append(" WHERE ").append(firstColumn).append(" = ? LIMIT 1");
+        params.add(id);
+
+        jdbcTemplate.update(sql.toString(), params.toArray());
+    }
 } 

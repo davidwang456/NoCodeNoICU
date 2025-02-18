@@ -9,7 +9,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -24,18 +23,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.alibaba.excel.EasyExcel;
-import com.davidwang456.excel.enums.DataSourceType;
-import com.davidwang456.excel.listener.CsvDataListener;
-import com.davidwang456.excel.listener.ExcelDataListener;
-import com.davidwang456.excel.service.DynamicTableService;
-import com.davidwang456.excel.service.ExportService;
-import com.davidwang456.excel.service.MongoTableService;
-import com.davidwang456.excel.util.PinyinUtil;
-import com.davidwang456.excel.service.PreviewService;
-import com.davidwang456.excel.model.PreviewResult;
-import com.davidwang456.excel.model.ImportConfirmRequest;
 import com.davidwang456.excel.model.CancelImportRequest;
+import com.davidwang456.excel.model.ImportConfirmRequest;
+import com.davidwang456.excel.model.PreviewResult;
+import com.davidwang456.excel.service.ExportService;
+import com.davidwang456.excel.service.PreviewService;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -45,58 +37,39 @@ import io.swagger.annotations.ApiOperation;
 @RequestMapping("/api/excel")
 public class ExcelController {
     @Autowired
-    private DynamicTableService dynamicTableService;
-    
-    @Autowired
-    private MongoTableService mongoTableService;
-
-    @Autowired
     private ExportService exportService;
 
     @Autowired
     private PreviewService previewService;
 
-    @ApiOperation("动态创建表并导入数据")
-    @PostMapping("/uploadDynamicFile")
-    public String uploadDynamicFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "dataSource", defaultValue = "MYSQL") DataSourceType dataSource) 
-            throws IOException {
-        
-        String originalFilename = file.getOriginalFilename();
-        String fileExtension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
-        String tableName = PinyinUtil.toPinyin(
-            originalFilename.substring(0, originalFilename.lastIndexOf("."))
-        );
-        
-        if ("csv".equals(fileExtension)) {
-            CsvDataListener csvListener = new CsvDataListener(tableName, dynamicTableService, mongoTableService, dataSource);
-            file.getInputStream().mark(0);
-            csvListener.processData(file.getInputStream());
-        } else {
-            EasyExcel.read(
-                file.getInputStream(), 
-                new ExcelDataListener(tableName, dynamicTableService, mongoTableService, dataSource))
-                .sheet()
-                .doRead();
-        }
-        
-        String message;
-        switch (dataSource) {
-            case MYSQL:
-                message = "MySQL表 " + tableName + " 创建并导入数据成功！";
-                break;
-            case MONGODB:
-                message = "MongoDB集合 " + tableName + " 创建并导入数据成功！";
-                break;
-            case BOTH:
-                message = "MySQL表和MongoDB集合 " + tableName + " 创建并导入数据成功！";
-                break;
-            default:
-                message = "数据导入成功！";
-        }
-        return message;
-    }
+	/*
+	 * @ApiOperation("动态创建表并导入数据")
+	 * 
+	 * @PostMapping("/uploadDynamicFile") public String uploadDynamicFile(
+	 * 
+	 * @RequestParam("file") MultipartFile file,
+	 * 
+	 * @RequestParam(value = "dataSource", defaultValue = "MYSQL") DataSourceType
+	 * dataSource) throws IOException {
+	 * 
+	 * String originalFilename = file.getOriginalFilename(); String fileExtension =
+	 * originalFilename.substring(originalFilename.lastIndexOf(".") +
+	 * 1).toLowerCase(); String tableName = PinyinUtil.toPinyin(
+	 * originalFilename.substring(0, originalFilename.lastIndexOf(".")) );
+	 * 
+	 * if ("csv".equals(fileExtension)) { CsvDataListener csvListener = new
+	 * CsvDataListener(tableName, dynamicTableService, mongoTableService,
+	 * dataSource); file.getInputStream().mark(0);
+	 * csvListener.processData(file.getInputStream()); } else { EasyExcel.read(
+	 * file.getInputStream(), new ExcelDataListener(tableName, dynamicTableService,
+	 * mongoTableService, dataSource)) .sheet() .doRead(); }
+	 * 
+	 * String message; switch (dataSource) { case MYSQL: message = "MySQL表 " +
+	 * tableName + " 创建并导入数据成功！"; break; case MONGODB: message = "MongoDB集合 " +
+	 * tableName + " 创建并导入数据成功！"; break; case BOTH: message = "MySQL表和MongoDB集合 " +
+	 * tableName + " 创建并导入数据成功！"; break; default: message = "数据导入成功！"; } return
+	 * message; }
+	 */
 
     @ApiOperation("获取可导出的表名列表")
     @GetMapping("/tables")
