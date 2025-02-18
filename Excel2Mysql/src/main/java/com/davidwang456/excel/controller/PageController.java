@@ -7,12 +7,16 @@ import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.Map;
+import com.davidwang456.excel.service.AuditLogService;
 
 @Controller
 public class PageController {
     
     @Autowired
     private UserService userService;
+    
+    @Autowired
+    private AuditLogService auditLogService;
 
     @GetMapping("/")
     public String root() {
@@ -42,6 +46,7 @@ public class PageController {
         if (userService.validateUser(username, password)) {
             session.setAttribute("user", username);
             result.put("success", true);
+            auditLogService.logAudit(AuditLogService.ACTION_LOGIN, username);
         } else {
             result.put("success", false);
             result.put("message", "用户名或密码错误");
@@ -49,9 +54,13 @@ public class PageController {
         return result;
     }
 
-    @GetMapping("/logout")
+    @PostMapping("/logout")
     public String logout(HttpSession session) {
+        String username = (String) session.getAttribute("user");
         session.invalidate();
+        if (username != null) {
+            auditLogService.logAudit(AuditLogService.ACTION_LOGOUT, username);
+        }
         return "redirect:/login";
     }
-} 
+}

@@ -245,7 +245,7 @@ new Vue({
     },
     methods: {
         logout() {
-            axios.post('/api/auth/logout')
+            axios.post('/logout')
                 .then(() => {
                     window.location.href = '/login';
                 })

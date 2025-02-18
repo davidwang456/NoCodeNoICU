@@ -28,6 +28,8 @@ import com.davidwang456.excel.model.ImportConfirmRequest;
 import com.davidwang456.excel.model.PreviewResult;
 import com.davidwang456.excel.service.ExportService;
 import com.davidwang456.excel.service.PreviewService;
+import com.davidwang456.excel.service.AuditLogService;
+import javax.servlet.http.HttpSession;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -41,35 +43,9 @@ public class ExcelController {
 
     @Autowired
     private PreviewService previewService;
-
-	/*
-	 * @ApiOperation("动态创建表并导入数据")
-	 * 
-	 * @PostMapping("/uploadDynamicFile") public String uploadDynamicFile(
-	 * 
-	 * @RequestParam("file") MultipartFile file,
-	 * 
-	 * @RequestParam(value = "dataSource", defaultValue = "MYSQL") DataSourceType
-	 * dataSource) throws IOException {
-	 * 
-	 * String originalFilename = file.getOriginalFilename(); String fileExtension =
-	 * originalFilename.substring(originalFilename.lastIndexOf(".") +
-	 * 1).toLowerCase(); String tableName = PinyinUtil.toPinyin(
-	 * originalFilename.substring(0, originalFilename.lastIndexOf(".")) );
-	 * 
-	 * if ("csv".equals(fileExtension)) { CsvDataListener csvListener = new
-	 * CsvDataListener(tableName, dynamicTableService, mongoTableService,
-	 * dataSource); file.getInputStream().mark(0);
-	 * csvListener.processData(file.getInputStream()); } else { EasyExcel.read(
-	 * file.getInputStream(), new ExcelDataListener(tableName, dynamicTableService,
-	 * mongoTableService, dataSource)) .sheet() .doRead(); }
-	 * 
-	 * String message; switch (dataSource) { case MYSQL: message = "MySQL表 " +
-	 * tableName + " 创建并导入数据成功！"; break; case MONGODB: message = "MongoDB集合 " +
-	 * tableName + " 创建并导入数据成功！"; break; case BOTH: message = "MySQL表和MongoDB集合 " +
-	 * tableName + " 创建并导入数据成功！"; break; default: message = "数据导入成功！"; } return
-	 * message; }
-	 */
+    
+    @Autowired
+    private AuditLogService auditLogService;
 
     @ApiOperation("获取可导出的表名列表")
     @GetMapping("/tables")
@@ -81,10 +57,16 @@ public class ExcelController {
     @GetMapping("/exportToExcel")
     public ResponseEntity<byte[]> exportToExcel(
             @RequestParam String tableName,
-            @RequestParam(defaultValue = "MYSQL") String dataSource) throws IOException {
+            @RequestParam(defaultValue = "MYSQL") String dataSource,
+            HttpSession session) throws IOException {
         
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         exportService.exportToExcel(tableName, dataSource, outputStream);
+        
+        // 记录导出操作到审计日志
+        String username = (String) session.getAttribute("user");
+        String content = String.format("数据源: %s, 表名: %s, 格式: Excel", dataSource, tableName);
+        auditLogService.logAudit(AuditLogService.ACTION_EXPORT, username, content);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
@@ -100,10 +82,16 @@ public class ExcelController {
     @GetMapping("/exportToCsv")
     public ResponseEntity<byte[]> exportToCsv(
             @RequestParam String tableName,
-            @RequestParam(defaultValue = "MYSQL") String dataSource) throws IOException {
+            @RequestParam(defaultValue = "MYSQL") String dataSource,
+            HttpSession session) throws IOException {
         
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         exportService.exportToCsv(tableName, dataSource, outputStream);
+        
+        // 记录导出操作到审计日志
+        String username = (String) session.getAttribute("user");
+        String content = String.format("数据源: %s, 表名: %s, 格式: CSV", dataSource, tableName);
+        auditLogService.logAudit(AuditLogService.ACTION_EXPORT, username, content);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
@@ -160,7 +148,7 @@ public class ExcelController {
     }
 
     @PostMapping("/confirmImport")
-    public ResponseEntity<?> confirmImport(@RequestBody ImportConfirmRequest request) {
+    public ResponseEntity<?> confirmImport(@RequestBody ImportConfirmRequest request, HttpSession session) {
         System.out.println("Received import request: " + request);
         try {
             if ("BOTH".equals(request.getDataSource())) {
@@ -174,10 +162,20 @@ public class ExcelController {
                 previewService.importDataWithPreview(previewData, "MYSQL");
                 previewService.importDataWithPreview(previewData, "MONGODB");
                 
+                // 记录导入操作到审计日志
+                String username = (String) session.getAttribute("user");
+                String content = String.format("数据源: BOTH, 文件名: %s", request.getFileName());
+                auditLogService.logAudit(AuditLogService.ACTION_UPLOAD, username, content);
+                
                 // 最后清理预览数据
                 previewService.cancelImport(request.getFileName());
             } else {
                 previewService.importData(request.getFileName(), request.getDataSource());
+                
+                // 记录导入操作到审计日志
+                String username = (String) session.getAttribute("user");
+                String content = String.format("数据源: %s, 文件名: %s", request.getDataSource(), request.getFileName());
+                auditLogService.logAudit(AuditLogService.ACTION_UPLOAD, username, content);
             }
             return ResponseEntity.ok().build();
         } catch (Exception e) {
