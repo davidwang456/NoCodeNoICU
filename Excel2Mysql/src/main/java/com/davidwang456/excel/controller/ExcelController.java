@@ -164,17 +164,24 @@ public class ExcelController {
                 
                 // 记录导入操作到审计日志
                 String username = (String) session.getAttribute("user");
-                String content = String.format("数据源: BOTH, 文件名: %s", request.getFileName());
+                String content = String.format("数据源: BOTH, 文件名: %s", previewData.getTableName());
                 auditLogService.logAudit(AuditLogService.ACTION_UPLOAD, username, content);
                 
                 // 最后清理预览数据
                 previewService.cancelImport(request.getFileName());
             } else {
+                // 先获取预览数据
+                PreviewResult previewData = previewService.getPreviewResult(request.getFileName());
+                if (previewData == null) {
+                    throw new IllegalStateException("预览数据不存在，fileId: " + request.getFileName());
+                }
+                
+                // 执行导入操作
                 previewService.importData(request.getFileName(), request.getDataSource());
                 
                 // 记录导入操作到审计日志
                 String username = (String) session.getAttribute("user");
-                String content = String.format("数据源: %s, 文件名: %s", request.getDataSource(), request.getFileName());
+                String content = String.format("数据源: %s, 文件名: %s", request.getDataSource(), previewData.getTableName());
                 auditLogService.logAudit(AuditLogService.ACTION_UPLOAD, username, content);
             }
             return ResponseEntity.ok().build();
