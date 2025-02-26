@@ -304,6 +304,10 @@ new Vue({
         logout() {
             axios.post('/logout')
                 .then(() => {
+                    // 清除本地存储的会话相关信息
+                    sessionStorage.clear();
+                    localStorage.clear();
+                    // 重定向到登录页面
                     window.location.href = '/login';
                 })
                 .catch(() => {
