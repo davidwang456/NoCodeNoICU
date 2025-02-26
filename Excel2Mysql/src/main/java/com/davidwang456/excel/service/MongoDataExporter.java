@@ -60,7 +60,7 @@ public class MongoDataExporter implements DataExporter {
             }
 
             // 移除 _id 字段
-            firstDoc.remove("_id");
+            //firstDoc.remove("_id");
             return new ArrayList<>(firstDoc.keySet());
         } catch (Exception e) {
             System.out.println("获取MongoDB表头失败: " + e.getMessage());

@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
-import com.davidwang456.excel.service.DynamicTableService;
+import com.davidwang456.excel.service.MysqlTableService;
 
 public class DynamicDataListener extends AnalysisEventListener<Map<Integer, String>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicDataListener.class);
@@ -19,10 +19,10 @@ public class DynamicDataListener extends AnalysisEventListener<Map<Integer, Stri
     private Map<Integer, String> headMap = new HashMap<>();
     private Map<Integer, String> dataTypeMap = new HashMap<>(); // 用于存储每列的数据类型
     private String tableName;
-    private DynamicTableService tableService;
+    private MysqlTableService tableService;
     private boolean isFirstRow = true;
 
-    public DynamicDataListener(String tableName, DynamicTableService tableService) {
+    public DynamicDataListener(String tableName, MysqlTableService tableService) {
         this.tableName = tableName;
         this.tableService = tableService;
     }

@@ -178,8 +178,19 @@ const ManagePage = {
             this.loading = true;
             axios.get(`/api/excel/data?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`)
                 .then(response => {
-                    this.tableData = response.data.content;
-                    this.tableHeaders = response.data.headers;
+                    // 获取原始数据
+                    const originalData = response.data.content;
+                    const originalHeaders = response.data.headers;
+                    
+                    // 调试日志
+                    console.log('Original data:', originalData);
+                    
+                    // 过滤掉 system_id 从显示的表头中
+                    this.tableHeaders = originalHeaders.filter(header => header !== 'system_id');
+                    
+                    // 保留原始数据，包括 system_id
+                    this.tableData = originalData;
+                    
                     this.total = response.data.total;
                 })
                 .catch(() => {
@@ -194,19 +205,16 @@ const ManagePage = {
             this.loadTableData();
         },
         handleEdit(row) {
-            this.editForm = { ...row };
+            // 调试日志
+            console.log('Edit row:', row);
+            
+            // 确保复制完整的行数据，包括 system_id
+            this.editForm = JSON.parse(JSON.stringify(row));
+            
+            // 调试日志
+            console.log('Edit form:', this.editForm);
+            
             this.editDialogVisible = true;
-        },
-        confirmEdit() {
-            axios.put(`/api/dashboard/upd?${this.currentTable}&dataSource=${this.currentDataSource}`, this.editForm)
-                .then(() => {
-                    this.$message.success('修改成功');
-                    this.editDialogVisible = false;
-                    this.loadTableData();
-                })
-                .catch(() => {
-                    this.$message.error('修改失败');
-                });
         },
         handleDelete(row) {
             this.$confirm('确认删除该条数据?', '提示', {
@@ -214,15 +222,47 @@ const ManagePage = {
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                axios.delete(`/api/dashboard/del?${this.currentTable}&${row.id}&dataSource=${this.currentDataSource}`)
+                // 将 dataSource 转换为小写以匹配后端期望的格式
+                const dataSource = this.currentDataSource.toLowerCase();
+                // 使用第一列的值作为 id
+                const id = row[this.tableHeaders[0]];
+                
+                // 修改为匹配后端 URL 格式
+                axios.delete(`/api/dashboard/del/${dataSource}/${this.currentTable}/${id}`)
                     .then(() => {
                         this.$message.success('删除成功');
                         this.loadTableData();
                     })
-                    .catch(() => {
-                        this.$message.error('删除失败');
+                    .catch((error) => {
+                        this.$message.error('删除失败: ' + (error.response?.data || '未知错误'));
                     });
             }).catch(() => {});
+        },
+        confirmEdit() {
+            // 调试日志
+            console.log('Confirming edit with form:', this.editForm);
+            
+            const dataSource = this.currentDataSource.toLowerCase();
+            const id = this.editForm.system_id;
+            
+            // 调试日志
+            console.log('Using system_id:', id);
+            
+            if (!id && id !== 0) {
+                this.$message.error('系统编号不存在，无法更新数据');
+                return;
+            }
+            
+            axios.put(`/api/dashboard/upd/${dataSource}/${this.currentTable}/${id}`, this.editForm)
+                .then(() => {
+                    this.$message.success('修改成功');
+                    this.editDialogVisible = false;
+                    this.loadTableData();
+                })
+                .catch((error) => {
+                    console.error('Update error:', error);
+                    this.$message.error('修改失败: ' + (error.response?.data || '未知错误'));
+                });
         },
         exportToExcel() {
             window.location.href = `/api/excel/exportToExcel?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`;

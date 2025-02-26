@@ -25,7 +25,7 @@ public class PreviewService {
     private final Map<String, PreviewData> previewCache = new ConcurrentHashMap<>();
     
     @Autowired
-    private DynamicTableService dynamicTableService;
+    private MysqlTableService dynamicTableService;
 
     @Autowired
     private MongoTableService mongoTableService;

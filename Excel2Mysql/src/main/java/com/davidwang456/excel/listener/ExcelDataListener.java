@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import com.davidwang456.excel.service.MongoTableService;
 import com.davidwang456.excel.enums.DataSourceType;
-import com.davidwang456.excel.service.DynamicTableService;
+import com.davidwang456.excel.service.MysqlTableService;
 
 public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExcelDataListener.class);
@@ -16,14 +16,14 @@ public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String
     private Map<Integer, String> headMap = new HashMap<>();
     private Map<Integer, String> dataTypeMap = new HashMap<>(); // 用于存储每列的数据类型
     private final String tableName;
-    private final DynamicTableService mysqlService;
+    private final MysqlTableService mysqlService;
     private final MongoTableService mongoService;
     private final DataSourceType dataSource;
     private boolean isFirstRow = true;
     private List<String> headers = new ArrayList<>();
     private List<String> orderedHeaders = new ArrayList<>(); // 新增：保存有序的列名
 
-    public ExcelDataListener(String tableName, DynamicTableService mysqlService, 
+    public ExcelDataListener(String tableName, MysqlTableService mysqlService, 
             MongoTableService mongoService, DataSourceType dataSource) {
         this.tableName = tableName;
         this.mysqlService = mysqlService;

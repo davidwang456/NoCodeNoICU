@@ -11,6 +11,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import javax.annotation.PostConstruct;
+
 import com.davidwang456.excel.util.PinyinUtil;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -20,10 +23,47 @@ import com.mongodb.client.result.UpdateResult;
 @Service
 public class MongoTableService {
     private static final Logger LOGGER = LoggerFactory.getLogger(MongoTableService.class);
-    
+    private static final String METADATA_COLLECTION = "table_metadata";
+
     @Autowired
     private MongoTemplate mongoTemplate;
 
+    @PostConstruct
+    public void init() {
+        // 确保元数据集合存在
+        if (!mongoTemplate.collectionExists(METADATA_COLLECTION)) {
+            mongoTemplate.createCollection(METADATA_COLLECTION);
+            LOGGER.info("MongoDB元数据集合创建成功");
+        }
+    }
+
+    public void saveColumnOrder(String tableName, List<String> columnOrder) {
+        Document metadata = new Document();
+        metadata.put("table_name", tableName);
+        metadata.put("column_order", columnOrder);
+        metadata.put("create_time", new Date());
+
+        // 使用 upsert 操作保存或更新元数据
+        Query query = new Query(Criteria.where("table_name").is(tableName));
+        Update update = new Update()
+                .set("column_order", columnOrder)
+                .set("update_time", new Date());
+        
+        mongoTemplate.upsert(query, update, METADATA_COLLECTION);
+        LOGGER.info("MongoDB集合 {} 的列顺序已保存", tableName);
+    }
+
+    public List<String> getColumnOrder(String tableName) {
+        Query query = new Query(Criteria.where("table_name").is(tableName));
+        Document metadata = mongoTemplate.findOne(query, Document.class, METADATA_COLLECTION);
+        
+        if (metadata != null && metadata.containsKey("column_order")) {
+            return (List<String>) metadata.get("column_order");
+        } else {
+            LOGGER.warn("获取MongoDB集合 {} 的列顺序失败: 未找到相关信息", tableName);
+            return null;
+        }
+    }
     public void createCollection(String collectionName) {
         if (mongoTemplate.collectionExists(collectionName)) {
             mongoTemplate.dropCollection(collectionName);
@@ -70,30 +110,6 @@ public class MongoTableService {
         }
         return formatted;
     }
-
-    public void saveColumnOrder(String tableName, List<String> columnOrder) {
-        // 在一个单独的集合中保存列顺序
-        Document metadata = new Document();
-        metadata.put("tableName", tableName);
-        metadata.put("columnOrder", columnOrder);
-        
-        // 更新或插入列顺序信息
-        mongoTemplate.upsert(
-            Query.query(Criteria.where("tableName").is(tableName)),
-            Update.fromDocument(metadata),
-            "table_metadata"
-        );
-    }
-    
-    public List<String> getColumnOrder(String tableName) {
-        Document metadata = mongoTemplate.findOne(
-            Query.query(Criteria.where("tableName").is(tableName)),
-            Document.class,
-            "table_metadata"
-        );
-        return metadata != null ? (List<String>) metadata.get("columnOrder") : null;
-    }
-
     public void deleteData(String collectionName, String id) {
         // 获取列顺序
         List<String> columnOrder = getColumnOrder(collectionName);
@@ -206,4 +222,4 @@ public class MongoTableService {
         
         return result;
     }
-} 
+}

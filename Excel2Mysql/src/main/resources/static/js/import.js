@@ -22,8 +22,14 @@ Vue.component('import-view', {
 
             axios.post('/api/excel/preview', formData)
                 .then(response => {
+                    // 保存完整数据，包含system_id和objectId
                     this.previewData = response.data.data;
-                    this.previewHeaders = response.data.headers;
+                    
+                    // 过滤掉system_id和objectId字段
+                    const filteredHeaders = response.data.headers.filter(header => 
+                        header !== 'system_id' && header !== '_id'
+                    );
+                    this.previewHeaders = filteredHeaders;
                 })
                 .catch(error => {
                     this.$message.error('预览失败：' + error.message);

@@ -8,7 +8,7 @@ import com.opencsv.exceptions.CsvException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.davidwang456.excel.service.DynamicTableService;
+import com.davidwang456.excel.service.MysqlTableService;
 import com.davidwang456.excel.service.MongoTableService;
 import com.davidwang456.excel.enums.DataSourceType;
 
@@ -20,14 +20,14 @@ public class CsvDataListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(CsvDataListener.class);
     private static final int BATCH_COUNT = 100;
     private final String tableName;
-    private final DynamicTableService mysqlService;
+    private final MysqlTableService mysqlService;
     private final MongoTableService mongoService;
     private final DataSourceType dataSource;
     private List<Map<Integer, String>> dataList = new ArrayList<>();
     private Map<Integer, String> headMap = new HashMap<>();
     private Map<Integer, String> dataTypeMap = new HashMap<>();
 
-    public CsvDataListener(String tableName, DynamicTableService mysqlService, 
+    public CsvDataListener(String tableName, MysqlTableService mysqlService, 
             MongoTableService mongoService, DataSourceType dataSource) {
         this.tableName = tableName;
         this.mysqlService = mysqlService;

@@ -13,11 +13,10 @@ public class MysqlDataExporter implements DataExporter {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private DynamicTableService dynamicTableService;
+    private MysqlTableService dynamicTableService;
 
     @Override
     public List<Map<String, Object>> exportData(String tableName) {
-        // 获取除system_id外的所有列名
         List<String> columns = getHeaders(tableName);
         String columnList = String.join(",", columns);
         String sql = "SELECT " + columnList + " FROM `" + tableName + "`";
@@ -30,7 +29,7 @@ public class MysqlDataExporter implements DataExporter {
         List<Map<String, Object>> columns = jdbcTemplate.queryForList(sql);
         return columns.stream()
                 .map(column -> column.get("Field").toString())
-                .filter(field -> !"system_id".equals(field))
+                //.filter(field -> !"system_id".equals(field))
                 .collect(Collectors.toList());
     }
 

@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.davidwang456.excel.service.DynamicTableService;
+import com.davidwang456.excel.service.MysqlTableService;
 import com.davidwang456.excel.service.MongoTableService;
 
 import java.util.Map;
@@ -14,7 +14,7 @@ import java.util.Map;
 public class DataOperationController {
 
     @Autowired
-    private DynamicTableService dynamicTableService;
+    private MysqlTableService dynamicTableService;
 
     @Autowired
     private MongoTableService mongoTableService;
