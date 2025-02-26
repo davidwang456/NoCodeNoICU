@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 
 @Service
 public class MongoDataExporter implements DataExporter {
@@ -32,9 +33,20 @@ public class MongoDataExporter implements DataExporter {
             return rawData.stream()
                     .map(doc -> {
                         Map<String, Object> orderedData = new LinkedHashMap<>();
+                        // 特殊处理 _id 字段
+                        if (doc.get("_id") != null) {
+                            ObjectId objectId = (ObjectId) doc.get("_id");
+                            Map<String, String> idObject = new HashMap<>();
+                            idObject.put("$oid", objectId.toString());
+                            orderedData.put("_id", idObject);
+                        }
+                        
+                        // 处理其他字段
                         for (String header : orderedHeaders) {
-                            String formattedHeader = mongoTableService.formatFieldName(header);
-                            orderedData.put(header, doc.get(formattedHeader));
+                            if (!header.equals("_id")) {  // 跳过 _id，因为已经处理过了
+                                String formattedHeader = mongoTableService.formatFieldName(header);
+                                orderedData.put(header, doc.get(formattedHeader));
+                            }
                         }
                         return orderedData;
                     })

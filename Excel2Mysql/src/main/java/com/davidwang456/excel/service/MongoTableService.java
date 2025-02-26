@@ -38,19 +38,32 @@ public class MongoTableService {
     }
 
     public void saveColumnOrder(String tableName, List<String> columnOrder) {
-        Document metadata = new Document();
-        metadata.put("table_name", tableName);
-        metadata.put("column_order", columnOrder);
-        metadata.put("create_time", new Date());
+        List<String> finalColumnOrder = new ArrayList<>();
+        finalColumnOrder.addAll(columnOrder);
 
-        // 使用 upsert 操作保存或更新元数据
+        // 先查询是否存在
         Query query = new Query(Criteria.where("table_name").is(tableName));
-        Update update = new Update()
-                .set("column_order", columnOrder)
-                .set("update_time", new Date());
-        
-        mongoTemplate.upsert(query, update, METADATA_COLLECTION);
-        LOGGER.info("MongoDB集合 {} 的列顺序已保存", tableName);
+        Document existingMetadata = mongoTemplate.findOne(query, Document.class, METADATA_COLLECTION);
+
+        if (existingMetadata != null) {
+            // 如果存在，执行更新操作
+            Update update = new Update()
+                    .set("column_order", String.join(",", finalColumnOrder))
+                    .set("update_time", new Date());
+            mongoTemplate.updateFirst(query, update, METADATA_COLLECTION);
+            LOGGER.info("MongoDB集合 {} 的列顺序已更新: {}", tableName, String.join(",", finalColumnOrder));
+        } else {
+            // 如果不存在，执行插入操作
+            Document metadata = new Document();
+            metadata.put("_id", new ObjectId());  // 显式设置_id
+            metadata.put("table_name", tableName);
+            metadata.put("column_order", String.join(",", finalColumnOrder));
+            metadata.put("create_time", new Date());
+            metadata.put("update_time", new Date());
+            
+            mongoTemplate.insert(metadata, METADATA_COLLECTION);
+            LOGGER.info("MongoDB集合 {} 的列顺序已新增: {}", tableName, String.join(",", finalColumnOrder));
+        }
     }
 
     public List<String> getColumnOrder(String tableName) {
@@ -58,7 +71,9 @@ public class MongoTableService {
         Document metadata = mongoTemplate.findOne(query, Document.class, METADATA_COLLECTION);
         
         if (metadata != null && metadata.containsKey("column_order")) {
-            return (List<String>) metadata.get("column_order");
+            // 将逗号分隔的字符串转回列表
+            String columnOrderStr = metadata.getString("column_order");
+            return Arrays.asList(columnOrderStr.split(","));
         } else {
             LOGGER.warn("获取MongoDB集合 {} 的列顺序失败: 未找到相关信息", tableName);
             return null;
@@ -75,11 +90,17 @@ public class MongoTableService {
     public void batchInsertData(String collectionName, Map<Integer, String> headMap, List<Map<Integer, String>> dataList) {
         List<Map<String, Object>> documents = new ArrayList<>();
         
-        // 获取有序的列名列表并保存
+        // 获取有序的列名列表
         List<String> orderedColumns = new ArrayList<>();
+        orderedColumns.add("_id"); // 添加 _id 字段
+        
+        // 格式化其他列名
         for (int i = 0; i < headMap.size(); i++) {
             String columnName = headMap.get(i);
-            orderedColumns.add(formatFieldName(columnName));
+            String formattedName = formatFieldName(columnName);
+            if (!"_id".equals(formattedName)) { // 避免重复添加 _id
+                orderedColumns.add(formattedName);
+            }
         }
         
         // 保存列顺序
@@ -87,10 +108,14 @@ public class MongoTableService {
         
         // 按照列顺序创建文档
         for (Map<Integer, String> data : dataList) {
-            Map<String, Object> document = new LinkedHashMap<>();  // 使用 LinkedHashMap 保持顺序
-            for (int i = 0; i < orderedColumns.size(); i++) {
-                String fieldName = orderedColumns.get(i);
-                document.put(fieldName, data.get(i));
+            Map<String, Object> document = new LinkedHashMap<>();
+            document.put("_id", new ObjectId()); // 为每个文档生成唯一的 _id
+            
+            for (int i = 0; i < headMap.size(); i++) {
+                String fieldName = formatFieldName(headMap.get(i));
+                if (!"_id".equals(fieldName)) { // 跳过 _id 字段
+                    document.put(fieldName, data.get(i));
+                }
             }
             documents.add(document);
         }
@@ -146,44 +171,28 @@ public class MongoTableService {
     }
 
     public void updateData(String collectionName, String id, Map<String, Object> data) {
-        // 获取列顺序
-        List<String> columnOrder = getColumnOrder(collectionName);
-        if (columnOrder == null || columnOrder.isEmpty()) {
-            throw new RuntimeException("未找到表的列顺序信息");
-        }
-
-        // 找到第一个非_id的列名
-        String firstColumn = columnOrder.stream()
-                .filter(col -> !"_id".equals(col))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("未找到可用的查询列"));
-
         try {
-            // 使用第一个非系统列进行查询
-            Query query = new Query(Criteria.where(firstColumn).is(id));
-            Document doc = mongoTemplate.findOne(query, Document.class, collectionName);
-            if (doc == null) {
-                throw new RuntimeException("未找到要更新的文档");
-            }
-
-            // 使用找到的文档的_id构建更新查询
-            Query updateQuery = new Query(Criteria.where("_id").is(doc.get("_id")));
-            Update update = new Update();
+            // 直接使用 _id 构建查询条件
+            ObjectId objectId = new ObjectId(id);
+            Query query = new Query(Criteria.where("_id").is(objectId));
             
             // 构建更新字段
+            Update update = new Update();
             for (Map.Entry<String, Object> entry : data.entrySet()) {
-                if (!"_id".equals(entry.getKey())) {
+                if (!"_id".equals(entry.getKey())) {  // 跳过_id字段
                     String key = formatFieldName(entry.getKey());
                     update.set(key, entry.getValue());
                 }
             }
 
-            UpdateResult result = mongoTemplate.updateFirst(updateQuery, update, collectionName);
+            UpdateResult result = mongoTemplate.updateFirst(query, update, collectionName);
             if (result.getModifiedCount() == 0) {
                 throw new RuntimeException("更新文档失败");
             }
             
-            LOGGER.info("MongoDB集合 {} 更新文档成功", collectionName);
+            LOGGER.info("MongoDB集合 {} 更新文档成功, _id: {}", collectionName, id);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("无效的ObjectId格式: " + id);
         } catch (Exception e) {
             throw new RuntimeException("更新失败: " + e.getMessage());
         }

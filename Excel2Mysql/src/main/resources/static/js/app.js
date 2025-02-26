@@ -182,11 +182,8 @@ const ManagePage = {
                     const originalData = response.data.content;
                     const originalHeaders = response.data.headers;
                     
-                    // 调试日志
-                    console.log('Original data:', originalData);
-                    
                     // 过滤掉 system_id 从显示的表头中
-                    this.tableHeaders = originalHeaders.filter(header => header !== 'system_id');
+                    this.tableHeaders = originalHeaders.filter(header => header !== 'system_id' && header !== '_id');
                     
                     // 保留原始数据，包括 system_id
                     this.tableData = originalData;
@@ -205,14 +202,8 @@ const ManagePage = {
             this.loadTableData();
         },
         handleEdit(row) {
-            // 调试日志
-            console.log('Edit row:', row);
-            
             // 确保复制完整的行数据，包括 system_id
             this.editForm = JSON.parse(JSON.stringify(row));
-            
-            // 调试日志
-            console.log('Edit form:', this.editForm);
             
             this.editDialogVisible = true;
         },
@@ -239,17 +230,35 @@ const ManagePage = {
             }).catch(() => {});
         },
         confirmEdit() {
-            // 调试日志
-            console.log('Confirming edit with form:', this.editForm);
-            
             const dataSource = this.currentDataSource.toLowerCase();
-            const id = this.editForm.system_id;
             
-            // 调试日志
-            console.log('Using system_id:', id);
+            // 根据数据源类型选择不同的 ID 字段，处理特殊的 MongoDB _id 结构
+            let id;
+            if (dataSource === 'mysql') {
+                id = this.editForm.system_id;
+            } else {
+                // MongoDB 情况
+                const mongoId = this.editForm._id;
+                if (typeof mongoId === 'object') {
+                    // 如果有 $oid 字段，使用它
+                    if (mongoId.$oid) {
+                        id = mongoId.$oid;
+                    }
+                    // 如果有 timestamp 字段，使用它
+                    else if (mongoId.timestamp) {
+                        id = mongoId.timestamp;
+                    }
+                    // 否则使用原始值
+                    else {
+                        id = mongoId;
+                    }
+                } else {
+                    id = mongoId;
+                }
+            }
             
             if (!id && id !== 0) {
-                this.$message.error('系统编号不存在，无法更新数据');
+                this.$message.error('ID不存在，无法更新数据');
                 return;
             }
             
@@ -260,7 +269,6 @@ const ManagePage = {
                     this.loadTableData();
                 })
                 .catch((error) => {
-                    console.error('Update error:', error);
                     this.$message.error('修改失败: ' + (error.response?.data || '未知错误'));
                 });
         },
