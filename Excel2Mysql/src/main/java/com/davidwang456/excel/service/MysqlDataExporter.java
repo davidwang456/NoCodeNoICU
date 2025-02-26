@@ -29,7 +29,7 @@ public class MysqlDataExporter implements DataExporter {
         List<Map<String, Object>> columns = jdbcTemplate.queryForList(sql);
         return columns.stream()
                 .map(column -> column.get("Field").toString())
-                //.filter(field -> !"system_id".equals(field))
+                .filter(field -> !"system_id".equals(field))
                 .collect(Collectors.toList());
     }
 
