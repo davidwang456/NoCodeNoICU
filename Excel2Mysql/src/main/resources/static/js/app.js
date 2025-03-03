@@ -229,6 +229,23 @@ const ManagePage = {
                     });
             }).catch(() => {});
         },
+        handleImageUpload(file, header) {
+            // 检查文件类型
+            if (!file.raw.type.startsWith('image/')) {
+                this.$message.error('只能上传图片文件!');
+                return;
+            }
+            
+            // 读取文件并转换为Base64
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // 获取Base64编码
+                const base64 = e.target.result;
+                // 更新表单中的图片
+                this.editForm[header] = base64;
+            };
+            reader.readAsDataURL(file.raw);
+        },
         confirmEdit() {
             const dataSource = this.currentDataSource.toLowerCase();
             

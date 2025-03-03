@@ -15,7 +15,7 @@ import com.davidwang456.excel.service.MysqlTableService;
 public class DynamicDataListener extends AnalysisEventListener<Map<Integer, String>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicDataListener.class);
     private static final int BATCH_COUNT = 100;
-    private List<Map<Integer, String>> dataList = new ArrayList<>();
+    private List<Map<Integer, Object>> dataList = new ArrayList<>();
     private Map<Integer, String> headMap = new HashMap<>();
     private Map<Integer, String> dataTypeMap = new HashMap<>(); // 用于存储每列的数据类型
     private String tableName;
@@ -34,7 +34,12 @@ public class DynamicDataListener extends AnalysisEventListener<Map<Integer, Stri
             analyzeDataTypes(data);
             isFirstRow = false;
         }
-        dataList.add(data);
+        // 将Map<Integer, String>转换为Map<Integer, Object>
+        Map<Integer, Object> objectData = new HashMap<>();
+        for (Map.Entry<Integer, String> entry : data.entrySet()) {
+            objectData.put(entry.getKey(), entry.getValue());
+        }
+        dataList.add(objectData);
         if (dataList.size() >= BATCH_COUNT) {
             saveData();
             dataList.clear();

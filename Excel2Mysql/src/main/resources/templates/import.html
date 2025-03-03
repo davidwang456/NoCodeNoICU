@@ -37,6 +37,21 @@
                     :key="header"
                     :prop="header"
                     :label="header">
+                    <template slot-scope="scope">
+                        <!-- 检查是否为图片标记，如果是[IMAGE]则显示图像预览图标 -->
+                        <template v-if="scope.row[header] === '[IMAGE]'">
+                            <div style="text-align: center;">
+                                <i class="el-icon-picture" style="font-size: 24px; color: #409EFF;"></i>
+                                <div style="font-size: 12px;">图片</div>
+                            </div>
+                        </template>
+                        <template v-else-if="scope.row[header] && typeof scope.row[header] === 'string' && scope.row[header].startsWith('data:image/')">
+                            <img :src="scope.row[header]" style="max-width: 100px; max-height: 100px;" />
+                        </template>
+                        <template v-else>
+                            {{ scope.row[header] }}
+                        </template>
+                    </template>
                 </el-table-column>
             </el-table>
             

@@ -14,7 +14,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.write.builder.ExcelWriterBuilder;
 import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
+import com.davidwang456.excel.util.ImageCellWriteHandler;
 
 @Service
 public class ExportService {
@@ -31,32 +33,77 @@ public class ExportService {
     }
 
     public void exportToExcel(String tableName, String dataSource, OutputStream outputStream) {
-        DataExporter exporter = getExporter(dataSource);
-        List<Map<String, Object>> data = exporter.exportData(tableName);
-        List<String> orderedHeaders = exporter.getOrderedHeaders(tableName);
-
-        // 转换数据格式以适应EasyExcel
-        List<List<Object>> rows = new ArrayList<>();
-        rows.add(new ArrayList<>(orderedHeaders)); // 使用有序的表头
-
-        // 按照有序表头的顺序添加数据
-        for (Map<String, Object> row : data) {
-            List<Object> rowData = new ArrayList<>();
-            for (String header : orderedHeaders) {
-                rowData.add(row.get(header));
+        LOGGER.info("开始导出Excel: 表名={}, 数据源={}", tableName, dataSource);
+        
+        try {
+            DataExporter exporter = getExporter(dataSource);
+            List<Map<String, Object>> data = exporter.exportData(tableName);
+            List<String> headers = exporter.getOrderedHeaders(tableName);
+            
+            // 检查是否有图片列
+            boolean hasImages = false;
+            List<Integer> imageColumnIndexes = new ArrayList<>();
+            
+            if (exporter instanceof MysqlDataExporter) {
+                hasImages = ((MysqlDataExporter) exporter).hasImageColumns(tableName);
+                if (hasImages) {
+                    LOGGER.info("检测到表中包含图片列");
+                    // 获取图片列的索引
+                    for (int i = 0; i < headers.size(); i++) {
+                        String columnName = headers.get(i);
+                        if (((MysqlDataExporter) exporter).isImageColumn(tableName, columnName)) {
+                            imageColumnIndexes.add(i);
+                            LOGGER.info("列 '{}' (索引: {}) 是图片列", columnName, i);
+                        }
+                    }
+                }
             }
-            rows.add(rowData);
+            
+            // 构建行数据（包括表头）
+            List<List<Object>> rows = new ArrayList<>();
+            rows.add(new ArrayList<>(headers));
+            
+            // 转换数据行
+            for (Map<String, Object> rowMap : data) {
+                List<Object> row = new ArrayList<>();
+                
+                for (String header : headers) {
+                    Object value = rowMap.get(header);
+                    
+                    // 检查是否为图片数据，不进行预处理，保留原始数据给ImageCellWriteHandler处理
+                    row.add(value);
+                }
+                
+                rows.add(row);
+            }
+            
+            // 配置Excel写入器，使用LongestMatchColumnWidthStyleStrategy设置列宽
+            ExcelWriterBuilder writerBuilder = EasyExcel.write(outputStream)
+                .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy());
+            
+            // 如果有图片数据，注册自定义的图片处理器
+            if (hasImages && !imageColumnIndexes.isEmpty()) {
+                LOGGER.info("注册ImageCellWriteHandler处理图片列: {}", imageColumnIndexes);
+                writerBuilder.registerWriteHandler(new ImageCellWriteHandler(rows, imageColumnIndexes));
+            }
+            
+            // 执行写入操作
+            writerBuilder.sheet(tableName).doWrite(rows);
+            
+            LOGGER.info("Excel导出完成，总行数: {}", rows.size());
+        } catch (Exception e) {
+            LOGGER.error("导出Excel时发生错误: {}", e.getMessage(), e);
         }
-
-        // 写入Excel
-        EasyExcel.write(outputStream)
-                .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
-                .sheet(tableName)
-                .doWrite(rows);
     }
-
+    
     public void exportToCsv(String tableName, String dataSource, OutputStream outputStream) {
         DataExporter exporter = getExporter(dataSource);
+        
+        // 检查表是否包含图片列
+        if (exporter instanceof MysqlDataExporter && ((MysqlDataExporter) exporter).hasImageColumns(tableName)) {
+            throw new UnsupportedOperationException("包含图片的表不支持导出为CSV格式，请使用Excel格式导出");
+        }
+        
         List<Map<String, Object>> data = exporter.exportData(tableName);
         List<String> orderedHeaders = exporter.getOrderedHeaders(tableName);
 
@@ -70,11 +117,20 @@ public class ExportService {
                 List<String> rowValues = new ArrayList<>();
                 for (String header : orderedHeaders) {
                     Object value = row.get(header);
+                    
+                    // 检查是否为图片数据
+                    if (value != null && (value instanceof byte[] || 
+                                         (value instanceof String && ((String) value).startsWith("data:image/")))) {
+                        throw new UnsupportedOperationException("包含图片的表不支持导出为CSV格式，请使用Excel格式导出");
+                    }
+                    
                     rowValues.add(value != null ? escapeCSVValue(value.toString()) : "");
                 }
                 outputStream.write(String.join(",", rowValues).getBytes());
                 outputStream.write("\n".getBytes());
             }
+        } catch (UnsupportedOperationException e) {
+            throw e; // 直接抛出不支持的操作异常
         } catch (Exception e) {
             throw new RuntimeException("导出CSV失败", e);
         }
@@ -119,5 +175,19 @@ public class ExportService {
         result.put("total", allData.size());
         result.put("headers", orderedHeaders);  // 添加有序的表头信息
         return result;
+    }
+    
+    /**
+     * 检查表是否包含图片列
+     * @param tableName 表名
+     * @param dataSource 数据源
+     * @return 如果表包含图片列则返回true，否则返回false
+     */
+    public boolean hasImageColumns(String tableName, String dataSource) {
+        DataExporter exporter = getExporter(dataSource);
+        if (exporter instanceof MysqlDataExporter) {
+            return ((MysqlDataExporter) exporter).hasImageColumns(tableName);
+        }
+        return false;
     }
 } 

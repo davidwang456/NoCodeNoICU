@@ -9,7 +9,8 @@ Vue.component('import-view', {
             previewHeaders: [],
             previewLoading: false,
             importing: false,
-            currentFile: null
+            currentFile: null,
+            totalRows: 0
         };
     },
     methods: {
@@ -22,17 +23,26 @@ Vue.component('import-view', {
 
             axios.post('/api/excel/preview', formData)
                 .then(response => {
-                    // 保存完整数据，包含system_id和objectId
-                    this.previewData = response.data.data;
-                    
-                    // 过滤掉system_id和objectId字段
-                    const filteredHeaders = response.data.headers.filter(header => 
-                        header !== 'system_id' && header !== '_id'
-                    );
-                    this.previewHeaders = filteredHeaders;
+                    if (response.data.success) {
+                        // 保存文件ID，用于后续确认导入
+                        this.currentFile = {
+                            name: response.data.fileId,
+                            raw: file.raw
+                        };
+                        
+                        // 处理预览数据
+                        this.previewData = response.data.content || [];
+                        this.previewHeaders = response.data.headers || [];
+                        
+                        // 记录总行数
+                        this.totalRows = response.data.total || 0;
+                    } else {
+                        this.$message.error('预览失败：' + (response.data.error || '未知错误'));
+                    }
                 })
                 .catch(error => {
-                    this.$message.error('预览失败：' + error.message);
+                    console.error('预览错误:', error);
+                    this.$message.error('预览失败：' + (error.response?.data?.error || error.message || '未知错误'));
                 })
                 .finally(() => {
                     this.previewLoading = false;
@@ -78,6 +88,7 @@ Vue.component('import-view', {
             this.currentFile = null;
             this.previewData = [];
             this.previewHeaders = [];
+            this.totalRows = 0;
         }
     }
 });

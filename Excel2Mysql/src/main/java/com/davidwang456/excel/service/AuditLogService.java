@@ -1,6 +1,5 @@
 package com.davidwang456.excel.service;
 
-import com.davidwang456.excel.entity.AuditLog;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;

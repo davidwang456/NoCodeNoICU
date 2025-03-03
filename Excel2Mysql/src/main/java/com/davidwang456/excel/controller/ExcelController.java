@@ -80,27 +80,44 @@ public class ExcelController {
 
     @ApiOperation("导出数据到CSV")
     @GetMapping("/exportToCsv")
-    public ResponseEntity<byte[]> exportToCsv(
+    public ResponseEntity<?> exportToCsv(
             @RequestParam String tableName,
             @RequestParam(defaultValue = "MYSQL") String dataSource,
             HttpSession session) throws IOException {
         
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        exportService.exportToCsv(tableName, dataSource, outputStream);
-        
-        // 记录导出操作到审计日志
-        String username = (String) session.getAttribute("user");
-        String content = String.format("数据源: %s, 表名: %s, 格式: CSV", dataSource, tableName);
-        auditLogService.logAudit(AuditLogService.ACTION_EXPORT, username, content);
+        try {
+            // 检查表是否包含图片列
+            if (exportService.hasImageColumns(tableName, dataSource)) {
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("error", "包含图片的表不支持导出为CSV格式，请使用Excel格式导出");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+            }
+            
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            exportService.exportToCsv(tableName, dataSource, outputStream);
+            
+            // 记录导出操作到审计日志
+            String username = (String) session.getAttribute("user");
+            String content = String.format("数据源: %s, 表名: %s, 格式: CSV", dataSource, tableName);
+            auditLogService.logAudit(AuditLogService.ACTION_EXPORT, username, content);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        String filename = URLEncoder.encode(tableName + System.currentTimeMillis() + ".csv", "UTF-8");
-        headers.setContentDispositionFormData("attachment", filename);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            String filename = URLEncoder.encode(tableName + System.currentTimeMillis() + ".csv", "UTF-8");
+            headers.setContentDispositionFormData("attachment", filename);
 
-        return ResponseEntity.ok()
-                .headers(headers)
-                .body(outputStream.toByteArray());
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(outputStream.toByteArray());
+        } catch (UnsupportedOperationException e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "导出CSV失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     @ApiOperation("分页查询数据")
@@ -151,14 +168,18 @@ public class ExcelController {
     public ResponseEntity<?> confirmImport(@RequestBody ImportConfirmRequest request, HttpSession session) {
         System.out.println("Received import request: " + request);
         try {
+            // 先获取预览数据，确保存在
+            PreviewResult previewData = previewService.getPreviewResult(request.getFileName());
+            if (previewData == null) {
+                String errorMsg = "预览数据不存在，fileId: " + request.getFileName();
+                System.out.println("Import failed: " + errorMsg);
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("error", errorMsg);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+            }
+            
             if ("BOTH".equals(request.getDataSource())) {
-                // 同时导入到 MySQL 和 MongoDB，先获取预览数据的副本
-                PreviewResult previewData = previewService.getPreviewResult(request.getFileName());
-                if (previewData == null) {
-                    throw new IllegalStateException("预览数据不存在，fileId: " + request.getFileName());
-                }
-                
-                // 使用同一份预览数据进行两次导入
+                // 同时导入到 MySQL 和 MongoDB
                 previewService.importDataWithPreview(previewData, "MYSQL");
                 previewService.importDataWithPreview(previewData, "MONGODB");
                 
@@ -166,16 +187,7 @@ public class ExcelController {
                 String username = (String) session.getAttribute("user");
                 String content = String.format("数据源: BOTH, 文件名: %s", previewData.getTableName());
                 auditLogService.logAudit(AuditLogService.ACTION_UPLOAD, username, content);
-                
-                // 最后清理预览数据
-                previewService.cancelImport(request.getFileName());
             } else {
-                // 先获取预览数据
-                PreviewResult previewData = previewService.getPreviewResult(request.getFileName());
-                if (previewData == null) {
-                    throw new IllegalStateException("预览数据不存在，fileId: " + request.getFileName());
-                }
-                
                 // 执行导入操作
                 previewService.importData(request.getFileName(), request.getDataSource());
                 
@@ -184,11 +196,17 @@ public class ExcelController {
                 String content = String.format("数据源: %s, 文件名: %s", request.getDataSource(), previewData.getTableName());
                 auditLogService.logAudit(AuditLogService.ACTION_UPLOAD, username, content);
             }
-            return ResponseEntity.ok().build();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "数据导入成功");
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            System.err.println("Import failed: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Collections.singletonMap("error", e.getMessage()));
+            System.out.println("Import failed: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "导入失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -197,5 +215,16 @@ public class ExcelController {
             @RequestBody CancelImportRequest request) {
         previewService.cancelImport(request.getFileName());
         return ResponseEntity.ok().build();
+    }
+
+    @ApiOperation("检查表是否包含图片列")
+    @GetMapping("/checkImageColumns")
+    public Map<String, Object> checkImageColumns(
+            @RequestParam String tableName,
+            @RequestParam(defaultValue = "MYSQL") String dataSource) {
+        Map<String, Object> result = new HashMap<>();
+        boolean hasImageColumns = exportService.hasImageColumns(tableName, dataSource);
+        result.put("hasImageColumns", hasImageColumns);
+        return result;
     }
 }

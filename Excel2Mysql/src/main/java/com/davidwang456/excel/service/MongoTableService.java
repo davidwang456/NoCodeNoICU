@@ -87,7 +87,7 @@ public class MongoTableService {
         LOGGER.info("MongoDB集合 {} 创建成功", collectionName);
     }
 
-    public void batchInsertData(String collectionName, Map<Integer, String> headMap, List<Map<Integer, String>> dataList) {
+    public void batchInsertData(String collectionName, Map<Integer, String> headMap, List<Map<Integer, Object>> dataList) {
         List<Map<String, Object>> documents = new ArrayList<>();
         
         // 获取有序的列名列表
@@ -107,14 +107,33 @@ public class MongoTableService {
         saveColumnOrder(collectionName, orderedColumns);
         
         // 按照列顺序创建文档
-        for (Map<Integer, String> data : dataList) {
+        for (Map<Integer, Object> data : dataList) {
             Map<String, Object> document = new LinkedHashMap<>();
             document.put("_id", new ObjectId()); // 为每个文档生成唯一的 _id
             
             for (int i = 0; i < headMap.size(); i++) {
                 String fieldName = formatFieldName(headMap.get(i));
                 if (!"_id".equals(fieldName)) { // 跳过 _id 字段
-                    document.put(fieldName, data.get(i));
+                    Object value = data.get(i);
+                    
+                    // 处理图像数据
+                    if (value != null) {
+                        // 跳过图像标记，只保存实际的图像数据
+                        if (value instanceof String && "[IMAGE]".equals(value)) {
+                            continue;
+                        }
+                        
+                        // 如果是图像数据（byte数组），直接保存
+                        if (value instanceof byte[]) {
+                            byte[] imageData = (byte[]) value;
+                            LOGGER.info("MongoDB保存图片数据到字段: {}, 大小: {}字节", fieldName, imageData.length);
+                            
+                            // MongoDB中存储二进制数据需要使用Binary对象
+                            document.put(fieldName, new org.bson.types.Binary(imageData));
+                        } else {
+                            document.put(fieldName, value);
+                        }
+                    }
                 }
             }
             documents.add(document);

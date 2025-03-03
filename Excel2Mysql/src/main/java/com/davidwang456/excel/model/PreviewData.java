@@ -9,12 +9,21 @@ public class PreviewData {
     private List<Map<String, Object>> data;
     private Path file;
     private String originalFileName;
+    private Map<String, byte[]> imageMap; // 图片映射，键为"行号:列号"，值为图片字节数组
 
     public PreviewData(List<String> headers, List<Map<String, Object>> data, Path file, String originalFileName) {
         this.headers = headers;
         this.data = data;
         this.file = file;
         this.originalFileName = originalFileName;
+    }
+    
+    public PreviewData(List<String> headers, List<Map<String, Object>> data, Path file, String originalFileName, Map<String, byte[]> imageMap) {
+        this.headers = headers;
+        this.data = data;
+        this.file = file;
+        this.originalFileName = originalFileName;
+        this.imageMap = imageMap;
     }
 
     public List<String> getHeaders() {
@@ -31,5 +40,9 @@ public class PreviewData {
 
     public String getOriginalFileName() {
         return originalFileName;
+    }
+    
+    public Map<String, byte[]> getImageMap() {
+        return imageMap;
     }
 } 

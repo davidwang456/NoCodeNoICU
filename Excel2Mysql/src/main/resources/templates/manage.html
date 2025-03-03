@@ -46,6 +46,15 @@
                     :key="header"
                     :prop="header"
                     :label="header">
+                    <template slot-scope="scope">
+                        <!-- 检查是否为Base64编码的图片 -->
+                        <template v-if="scope.row[header] && typeof scope.row[header] === 'string' && scope.row[header].startsWith('data:image/')">
+                            <img :src="scope.row[header]" style="max-width: 100px; max-height: 100px;" />
+                        </template>
+                        <template v-else>
+                            {{ scope.row[header] }}
+                        </template>
+                    </template>
                 </el-table-column>
                 <el-table-column
                     fixed="right"
@@ -70,7 +79,21 @@
                         v-for="header in tableHeaders" 
                         :key="header"
                         :label="header">
-                        <el-input v-model="editForm[header]"></el-input>
+                        <!-- 检查是否为Base64编码的图片 -->
+                        <template v-if="editForm[header] && typeof editForm[header] === 'string' && editForm[header].startsWith('data:image/')">
+                            <div>
+                                <img :src="editForm[header]" style="max-width: 100px; max-height: 100px;" />
+                                <el-upload
+                                    class="upload-demo"
+                                    action="#"
+                                    :auto-upload="false"
+                                    :show-file-list="false"
+                                    :on-change="(file) => handleImageUpload(file, header)">
+                                    <el-button size="small" type="primary">更换图片</el-button>
+                                </el-upload>
+                            </div>
+                        </template>
+                        <el-input v-else v-model="editForm[header]"></el-input>
                     </el-form-item>
                 </el-form>
                 <div slot="footer" class="dialog-footer">

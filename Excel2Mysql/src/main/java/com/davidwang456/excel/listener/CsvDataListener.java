@@ -23,7 +23,7 @@ public class CsvDataListener {
     private final MysqlTableService mysqlService;
     private final MongoTableService mongoService;
     private final DataSourceType dataSource;
-    private List<Map<Integer, String>> dataList = new ArrayList<>();
+    private List<Map<Integer, Object>> dataList = new ArrayList<>();
     private Map<Integer, String> headMap = new HashMap<>();
     private Map<Integer, String> dataTypeMap = new HashMap<>();
 
@@ -79,7 +79,7 @@ public class CsvDataListener {
                     boolean isFirstRow = true;
                     
                     for (String[] row : allRows) {
-                        Map<Integer, String> rowData = new HashMap<>();
+                        Map<Integer, Object> rowData = new HashMap<>();
                         for (int i = 0; i < row.length; i++) {
                             String value = row[i];
                             rowData.put(i, value);
