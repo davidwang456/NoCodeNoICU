@@ -44,16 +44,30 @@ public class ExportService {
             boolean hasImages = false;
             List<Integer> imageColumnIndexes = new ArrayList<>();
             
+            // 根据数据源类型处理图片列
             if (exporter instanceof MysqlDataExporter) {
                 hasImages = ((MysqlDataExporter) exporter).hasImageColumns(tableName);
                 if (hasImages) {
-                    LOGGER.info("检测到表中包含图片列");
+                    LOGGER.info("检测到MySQL表中包含图片列");
                     // 获取图片列的索引
                     for (int i = 0; i < headers.size(); i++) {
                         String columnName = headers.get(i);
                         if (((MysqlDataExporter) exporter).isImageColumn(tableName, columnName)) {
                             imageColumnIndexes.add(i);
-                            LOGGER.info("列 '{}' (索引: {}) 是图片列", columnName, i);
+                            LOGGER.info("MySQL列 '{}' (索引: {}) 是图片列", columnName, i);
+                        }
+                    }
+                }
+            } else if (exporter instanceof MongoDataExporter) {
+                hasImages = ((MongoDataExporter) exporter).hasImageFields(tableName);
+                if (hasImages) {
+                    LOGGER.info("检测到MongoDB集合中包含图片字段");
+                    // 获取MongoDB图片字段的索引
+                    for (int i = 0; i < headers.size(); i++) {
+                        String fieldName = headers.get(i);
+                        if (((MongoDataExporter) exporter).isImageField(tableName, fieldName)) {
+                            imageColumnIndexes.add(i);
+                            LOGGER.info("MongoDB字段 '{}' (索引: {}) 是图片字段", fieldName, i);
                         }
                     }
                 }
@@ -100,7 +114,7 @@ public class ExportService {
         DataExporter exporter = getExporter(dataSource);
         
         // 检查表是否包含图片列
-        if (exporter instanceof MysqlDataExporter && ((MysqlDataExporter) exporter).hasImageColumns(tableName)) {
+        if (hasImageColumns(tableName, dataSource)) {
             throw new UnsupportedOperationException("包含图片的表不支持导出为CSV格式，请使用Excel格式导出");
         }
         
@@ -187,6 +201,8 @@ public class ExportService {
         DataExporter exporter = getExporter(dataSource);
         if (exporter instanceof MysqlDataExporter) {
             return ((MysqlDataExporter) exporter).hasImageColumns(tableName);
+        } else if (exporter instanceof MongoDataExporter) {
+            return ((MongoDataExporter) exporter).hasImageFields(tableName);
         }
         return false;
     }
