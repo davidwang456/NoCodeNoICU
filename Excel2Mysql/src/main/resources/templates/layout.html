@@ -9,22 +9,47 @@
         body {
             margin: 0;
             padding: 0;
+            background-color: #f0f2f5;
         }
         .el-header {
             background-color: #409EFF;
             color: white;
             line-height: 60px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+            position: relative;
+            z-index: 1;
         }
         .el-aside {
-            background-color: #D3DCE6;
+            background-color: white;
             color: #333;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+            border-right: 1px solid #e6e6e6;
         }
         .el-main {
             padding: 20px;
+            background-color: white;
+            margin: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
         }
         .system-name {
             font-size: 20px;
             font-weight: bold;
+        }
+        .el-menu {
+            border-right: none;
+        }
+        .el-menu-item {
+            height: 50px;
+            line-height: 50px;
+        }
+        .el-menu-item.is-active {
+            background-color: #ecf5ff;
+            color: #409EFF;
+            border-right: 3px solid #409EFF;
+        }
+        .el-menu-item:hover {
+            background-color: #f5f7fa;
         }
     </style>
 </head>
