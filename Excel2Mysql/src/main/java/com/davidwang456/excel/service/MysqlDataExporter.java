@@ -37,6 +37,8 @@ public class MysqlDataExporter implements DataExporter {
         
         // 获取表的列类型信息
         analyzeTableColumns(tableName);
+        Set<String> imageColumns = tableImageColumns.getOrDefault(tableName, Collections.emptySet());
+        LOGGER.info("导出表 {} 数据，图片列: {}", tableName, imageColumns);
         
         // 使用自定义的RowMapper处理Blob类型
         return jdbcTemplate.query(sql, new RowMapper<Map<String, Object>>() {
@@ -55,26 +57,57 @@ public class MysqlDataExporter implements DataExporter {
                         try {
                             String base64Image = ImageUtil.blobToBase64((Blob) value);
                             if (base64Image != null) {
-                                // 添加data:image前缀，以便在Excel中显示
+                                // 添加data:image前缀，以便在前端显示
                                 value = "data:image/png;base64," + base64Image;
+                                LOGGER.info("成功转换Blob图片: 表={}, 列={}, 行={}, 大小={}字节", 
+                                          tableName, columnName, rowNum, base64Image.length());
                             } else {
                                 value = null;
+                                LOGGER.warn("Blob图片转换为null: 表={}, 列={}, 行={}", tableName, columnName, rowNum);
                             }
                         } catch (Exception e) {
-                            LOGGER.error("处理Blob图片时出错: " + columnName, e);
+                            LOGGER.error("处理Blob图片时出错: 表={}, 列={}, 行={}, 错误={}", 
+                                       tableName, columnName, rowNum, e.getMessage(), e);
                             value = null;
                         }
-                    } else if (value instanceof byte[] && tableImageColumns.getOrDefault(tableName, Collections.emptySet()).contains(columnName)) {
+                    } else if (value instanceof byte[] && imageColumns.contains(columnName)) {
                         // 处理byte[]类型的图片
                         try {
-                            String base64Image = ImageUtil.bytesToBase64((byte[]) value);
-                            if (base64Image != null) {
-                                value = "data:image/png;base64," + base64Image;
+                            byte[] imageBytes = (byte[]) value;
+                            if (imageBytes != null && imageBytes.length > 0) {
+                                // 检查是否已经是base64编码的图片数据
+                                String strValue = new String(imageBytes);
+                                if (strValue.startsWith("data:image/")) {
+                                    // 已经是base64编码的图片数据，直接使用
+                                    value = strValue;
+                                    LOGGER.info("检测到已编码的图片数据: 表={}, 列={}, 行={}, 长度={}字节", 
+                                              tableName, columnName, rowNum, strValue.length());
+                                } else {
+                                    // 原始图片数据，需要转换为base64
+                                    String base64Image = ImageUtil.bytesToBase64(imageBytes);
+                                    if (base64Image != null) {
+                                        // 检测图片类型并添加适当的MIME类型前缀
+                                        String mimeType = ImageUtil.detectMimeType(imageBytes);
+                                        value = "data:" + mimeType + ";base64," + base64Image;
+                                        LOGGER.info("成功转换byte[]图片: 表={}, 列={}, 行={}, 类型={}, 大小={}字节, base64长度={}", 
+                                                  tableName, columnName, rowNum, mimeType, imageBytes.length, base64Image.length());
+                                        
+                                        // 打印base64字符串的前50个字符，用于调试
+                                        if (base64Image.length() > 50) {
+                                            LOGGER.debug("Base64图片前缀: {}", base64Image.substring(0, 50));
+                                        }
+                                    } else {
+                                        value = null;
+                                        LOGGER.warn("byte[]图片转换为null: 表={}, 列={}, 行={}", tableName, columnName, rowNum);
+                                    }
+                                }
                             } else {
                                 value = null;
+                                LOGGER.warn("byte[]图片为空: 表={}, 列={}, 行={}", tableName, columnName, rowNum);
                             }
                         } catch (Exception e) {
-                            LOGGER.error("处理byte[]图片时出错: " + columnName, e);
+                            LOGGER.error("处理byte[]图片时出错: 表={}, 列={}, 行={}, 错误={}", 
+                                       tableName, columnName, rowNum, e.getMessage(), e);
                             value = null;
                         }
                     }

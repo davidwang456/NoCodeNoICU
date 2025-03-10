@@ -45,14 +45,35 @@ public class MysqlTableService {
         List<String> columnOrder = new ArrayList<>();
         columnOrder.add("system_id"); // 添加system_id作为第一列
 
+        // 图片相关的关键词列表
+        List<String> imageKeywords = Arrays.asList(
+            "图片", "照片", "相片", "pic", "image", "photo", "picture", "logo", "icon", "头像", "img", "图像"
+        );
+
         headMap.forEach((index, columnName) -> {
             String formattedColumnName = formatColumnName(columnName);
             String dataType = dataTypeMap.getOrDefault(index, "VARCHAR(255)");
             
-            // 检查是否为图片列
-            if ("MEDIUMBLOB".equals(dataType) || "[IMAGE]".equals(dataTypeMap.get(index))) {
+            // 检查是否为图片列 - 根据列类型和列名
+            boolean isImageColumn = "MEDIUMBLOB".equals(dataType) 
+                || "[IMAGE]".equals(dataTypeMap.get(index))
+                || "[IMAGE_PLACEHOLDER]".equals(dataTypeMap.get(index));
+            
+            // 如果不是通过类型判断的图片列，尝试通过列名判断
+            if (!isImageColumn) {
+                String lowerColumnName = columnName.toLowerCase();
+                for (String keyword : imageKeywords) {
+                    if (lowerColumnName.contains(keyword.toLowerCase())) {
+                        isImageColumn = true;
+                        LOGGER.info("检测到基于名称的图片列: {}, 包含关键词: {}", columnName, keyword);
+                        break;
+                    }
+                }
+            }
+            
+            if (isImageColumn) {
                 dataType = "MEDIUMBLOB";
-                LOGGER.info("检测到图片列: {}, 使用MEDIUMBLOB类型", formattedColumnName);
+                LOGGER.info("确认图片列: {}, 使用MEDIUMBLOB类型", formattedColumnName);
             }
             
             columnDefinitions.add("`" + formattedColumnName + "` " + dataType);

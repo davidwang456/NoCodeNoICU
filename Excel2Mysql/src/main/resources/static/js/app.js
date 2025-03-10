@@ -14,7 +14,9 @@ const ImportPage = {
             previewLoading: false,
             importing: false,
             previewFileName: '',
-            fileId: ''
+            fileId: '',
+            imageDialogVisible: false,
+            currentImage: ''
         }
     },
     methods: {
@@ -31,6 +33,21 @@ const ImportPage = {
                     this.previewTotal = response.data.total;
                     this.previewFileName = file.name;
                     this.fileId = response.data.fileId;
+                    
+                    let hasImages = false;
+                    this.previewData.forEach(row => {
+                        Object.keys(row).forEach(key => {
+                            const value = row[key];
+                            if (typeof value === 'string' && value.startsWith('data:image/')) {
+                                hasImages = true;
+                                console.log('检测到图片数据:', key);
+                            }
+                        });
+                    });
+                    
+                    if (hasImages) {
+                        this.$message.success('成功加载包含图片的Excel文件');
+                    }
                 })
                 .catch(() => {
                     this.$message.error('预览失败');
@@ -38,6 +55,10 @@ const ImportPage = {
                 .finally(() => {
                     this.previewLoading = false;
                 });
+        },
+        showImageDialog(imageUrl) {
+            this.currentImage = imageUrl;
+            this.imageDialogVisible = true;
         },
         confirmImport() {
             if (!this.previewFileName || !this.fileId) {
@@ -84,6 +105,8 @@ const ImportPage = {
             this.previewFileName = '';
             this.fileId = '';
             this.importing = false;
+            this.imageDialogVisible = false;
+            this.currentImage = '';
         }
     }
 };
@@ -141,13 +164,19 @@ const ManagePage = {
             pageSize: 10,
             total: 0,
             editDialogVisible: false,
-            editForm: {}
+            editForm: {},
+            imageDialogVisible: false,
+            currentImage: ''
         }
     },
     created() {
         this.fetchTableList();
     },
     methods: {
+        showImageDialog(imageUrl) {
+            this.currentImage = imageUrl;
+            this.imageDialogVisible = true;
+        },
         handleDataSourceChange() {
             this.currentTable = '';
             this.tableData = [];
@@ -158,11 +187,9 @@ const ManagePage = {
             axios.get(`/api/excel/tables?dataSource=${this.currentDataSource}`)
                 .then(response => {
                     this.tables = response.data;
-                    // 清空当前表和数据
                     this.currentTable = '';
                     this.tableData = [];
                     this.tableHeaders = [];
-                    // 只有在确认有表存在的情况下才选择第一个表并加载数据
                     if (this.tables && this.tables.length > 0) {
                         this.currentTable = this.tables[0];
                         this.loadTableData();
@@ -178,14 +205,11 @@ const ManagePage = {
             this.loading = true;
             axios.get(`/api/excel/data?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`)
                 .then(response => {
-                    // 获取原始数据
                     const originalData = response.data.content;
                     const originalHeaders = response.data.headers;
                     
-                    // 过滤掉 system_id 从显示的表头中
                     this.tableHeaders = originalHeaders.filter(header => header !== 'system_id' && header !== '_id');
                     
-                    // 保留原始数据，包括 system_id
                     this.tableData = originalData;
                     
                     this.total = response.data.total;
@@ -202,7 +226,6 @@ const ManagePage = {
             this.loadTableData();
         },
         handleEdit(row) {
-            // 确保复制完整的行数据，包括 system_id
             this.editForm = JSON.parse(JSON.stringify(row));
             
             this.editDialogVisible = true;
@@ -213,12 +236,9 @@ const ManagePage = {
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                // 将 dataSource 转换为小写以匹配后端期望的格式
                 const dataSource = this.currentDataSource.toLowerCase();
-                // 使用第一列的值作为 id
                 const id = row[this.tableHeaders[0]];
                 
-                // 修改为匹配后端 URL 格式
                 axios.delete(`/api/dashboard/del/${dataSource}/${this.currentTable}/${id}`)
                     .then(() => {
                         this.$message.success('删除成功');
@@ -230,18 +250,14 @@ const ManagePage = {
             }).catch(() => {});
         },
         handleImageUpload(file, header) {
-            // 检查文件类型
             if (!file.raw.type.startsWith('image/')) {
                 this.$message.error('只能上传图片文件!');
                 return;
             }
             
-            // 读取文件并转换为Base64
             const reader = new FileReader();
             reader.onload = (e) => {
-                // 获取Base64编码
                 const base64 = e.target.result;
-                // 更新表单中的图片
                 this.editForm[header] = base64;
             };
             reader.readAsDataURL(file.raw);
@@ -249,23 +265,18 @@ const ManagePage = {
         confirmEdit() {
             const dataSource = this.currentDataSource.toLowerCase();
             
-            // 根据数据源类型选择不同的 ID 字段，处理特殊的 MongoDB _id 结构
             let id;
             if (dataSource === 'mysql') {
                 id = this.editForm.system_id;
             } else {
-                // MongoDB 情况
                 const mongoId = this.editForm._id;
                 if (typeof mongoId === 'object') {
-                    // 如果有 $oid 字段，使用它
                     if (mongoId.$oid) {
                         id = mongoId.$oid;
                     }
-                    // 如果有 timestamp 字段，使用它
                     else if (mongoId.timestamp) {
                         id = mongoId.timestamp;
                     }
-                    // 否则使用原始值
                     else {
                         id = mongoId;
                     }
@@ -321,10 +332,8 @@ new Vue({
         logout() {
             axios.post('/logout')
                 .then(() => {
-                    // 清除本地存储的会话相关信息
                     sessionStorage.clear();
                     localStorage.clear();
-                    // 重定向到登录页面
                     window.location.href = '/login';
                 })
                 .catch(() => {

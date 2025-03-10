@@ -10,7 +10,9 @@ Vue.component('import-view', {
             previewLoading: false,
             importing: false,
             currentFile: null,
-            totalRows: 0
+            totalRows: 0,
+            imageDialogVisible: false,
+            currentImage: ''
         };
     },
     methods: {
@@ -36,6 +38,22 @@ Vue.component('import-view', {
                         
                         // 记录总行数
                         this.totalRows = response.data.total || 0;
+                        
+                        // 检查是否有图片数据
+                        let hasImages = false;
+                        this.previewData.forEach(row => {
+                            Object.keys(row).forEach(key => {
+                                const value = row[key];
+                                if (typeof value === 'string' && value.startsWith('data:image/')) {
+                                    hasImages = true;
+                                    console.log('检测到图片数据:', key);
+                                }
+                            });
+                        });
+                        
+                        if (hasImages) {
+                            this.$message.success('成功加载包含图片的Excel文件');
+                        }
                     } else {
                         this.$message.error('预览失败：' + (response.data.error || '未知错误'));
                     }
@@ -47,6 +65,10 @@ Vue.component('import-view', {
                 .finally(() => {
                     this.previewLoading = false;
                 });
+        },
+        showImageDialog(imageUrl) {
+            this.currentImage = imageUrl;
+            this.imageDialogVisible = true;
         },
         confirmImport() {
             if (!this.currentFile) {
@@ -89,6 +111,8 @@ Vue.component('import-view', {
             this.previewData = [];
             this.previewHeaders = [];
             this.totalRows = 0;
+            this.imageDialogVisible = false;
+            this.currentImage = '';
         }
     }
 });

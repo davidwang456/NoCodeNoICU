@@ -117,4 +117,31 @@ public class ImageUtil {
         // 默认返回PNG类型
         return "image/png";
     }
+    
+    /**
+     * 检测图片字节数组的MIME类型
+     * @param imageBytes 图片字节数组
+     * @return 图片的MIME类型，如果无法确定则返回"image/png"
+     */
+    public static String detectMimeType(byte[] imageBytes) {
+        if (imageBytes == null || imageBytes.length < 8) {
+            return "image/png";
+        }
+        
+        // 检查文件头部特征
+        if (imageBytes[0] == (byte)0xFF && imageBytes[1] == (byte)0xD8) {
+            return "image/jpeg";
+        } else if (imageBytes[0] == (byte)0x89 && imageBytes[1] == (byte)0x50 && 
+                   imageBytes[2] == (byte)0x4E && imageBytes[3] == (byte)0x47) {
+            return "image/png";
+        } else if (imageBytes[0] == (byte)0x47 && imageBytes[1] == (byte)0x49 && 
+                   imageBytes[2] == (byte)0x46) {
+            return "image/gif";
+        } else if (imageBytes[0] == (byte)0x42 && imageBytes[1] == (byte)0x4D) {
+            return "image/bmp";
+        }
+        
+        // 默认返回PNG类型
+        return "image/png";
+    }
 } 

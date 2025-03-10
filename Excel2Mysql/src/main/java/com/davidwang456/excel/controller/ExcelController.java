@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -131,7 +132,8 @@ public class ExcelController {
     }
 
     @PostMapping("/preview")
-    public ResponseEntity<?> previewFile(@RequestParam("file") MultipartFile file) throws IOException {
+    public ResponseEntity<?> previewFile(@RequestParam("file") MultipartFile file, 
+                                        @RequestParam(value = "dataSource", required = false, defaultValue = "MYSQL") String dataSource) throws IOException {
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null) {
             throw new IllegalArgumentException("文件名不能为空");
@@ -222,8 +224,8 @@ public class ExcelController {
     public Map<String, Object> checkImageColumns(
             @RequestParam String tableName,
             @RequestParam(defaultValue = "MYSQL") String dataSource) {
-        Map<String, Object> result = new HashMap<>();
         boolean hasImageColumns = exportService.hasImageColumns(tableName, dataSource);
+        Map<String, Object> result = new HashMap<>();
         result.put("hasImageColumns", hasImageColumns);
         return result;
     }
