@@ -20,7 +20,6 @@ public class ExcelDataListener extends AnalysisEventListener<Map<Integer, String
     private final MongoTableService mongoService;
     private final DataSourceType dataSource;
     private boolean isFirstRow = true;
-    private List<String> headers = new ArrayList<>();
     private List<String> orderedHeaders = new ArrayList<>(); // 新增：保存有序的列名
 
     public ExcelDataListener(String tableName, MysqlTableService mysqlService, 

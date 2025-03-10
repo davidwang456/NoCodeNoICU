@@ -272,13 +272,22 @@ public class MysqlTableService {
             throw new RuntimeException("未找到表的列顺序信息");
         }
 
-        String firstColumn = columnOrder.stream()
-                .filter(col -> !"system_id".equals(col))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("未找到可用的查询列"));
+        // 确定使用哪个字段作为ID字段
+        String idField = determineIdField(tableName, columnOrder);
+        LOGGER.info("删除表 {} 数据，使用 {} 字段作为ID字段，ID值: {}", tableName, idField, id);
 
-        String sql = "DELETE FROM " + tableName + " WHERE " + firstColumn + " = ? LIMIT 1";
-        jdbcTemplate.update(sql, id);
+        String sql = "DELETE FROM `" + tableName + "` WHERE `" + idField + "` = ? LIMIT 1";
+        
+        try {
+            int deletedRows = jdbcTemplate.update(sql, id);
+            if (deletedRows == 0) {
+                throw new RuntimeException("ID不存在，无法删除数据");
+            }
+            LOGGER.info("成功删除表 {} 中ID为 {} 的数据", tableName, id);
+        } catch (Exception e) {
+            LOGGER.error("删除表 {} 数据失败: {}", tableName, e.getMessage(), e);
+            throw new RuntimeException("删除数据失败: " + e.getMessage());
+        }
     }
 
     public void updateData(String tableName, String id, Map<String, Object> data) {
@@ -295,6 +304,10 @@ public class MysqlTableService {
             }
         }
 
+        // 确定使用哪个字段作为ID字段
+        String idField = determineIdField(tableName, columnOrder);
+        LOGGER.info("更新表 {} 数据，使用 {} 字段作为ID字段，ID值: {}", tableName, idField, id);
+
         StringBuilder sql = new StringBuilder("UPDATE `").append(tableName).append("` SET ");
         List<Object> params = new ArrayList<>();
         
@@ -305,7 +318,7 @@ public class MysqlTableService {
             String columnName = entry.getKey();
             Object value = entry.getValue();
             
-            if (!"system_id".equals(columnName)) {
+            if (!idField.equals(columnName)) {
                 // 检查是否为图片数据（Base64编码的图片）
                 if (value instanceof String && ((String) value).startsWith("data:image/")) {
                     String dataType = columnTypes.get(columnName);
@@ -339,15 +352,63 @@ public class MysqlTableService {
         }
         
         sql.setLength(sql.length() - 2);
-        sql.append(" WHERE system_id = ?");
+        sql.append(" WHERE `").append(idField).append("` = ?");
         params.add(id);
 
-        int updatedRows = jdbcTemplate.update(sql.toString(), params.toArray());
-        if (updatedRows == 0) {
-            throw new RuntimeException("未找到ID为 " + id + " 的记录");
+        try {
+            int updatedRows = jdbcTemplate.update(sql.toString(), params.toArray());
+            if (updatedRows == 0) {
+                throw new RuntimeException("ID不存在，无法更新数据");
+            }
+            LOGGER.info("成功更新表 {} 中ID为 {} 的数据", tableName, id);
+        } catch (Exception e) {
+            LOGGER.error("更新表 {} 数据失败: {}", tableName, e.getMessage(), e);
+            throw new RuntimeException("更新数据失败: " + e.getMessage());
         }
     }
     
+    /**
+     * 确定表的ID字段
+     * @param tableName 表名
+     * @param columnOrder 列顺序
+     * @return ID字段名
+     */
+    private String determineIdField(String tableName, List<String> columnOrder) {
+        // 首先检查是否有system_id字段
+        if (columnOrder.contains("system_id")) {
+            return "system_id";
+        }
+        
+        // 检查是否有id字段
+        if (columnOrder.contains("id")) {
+            return "id";
+        }
+        
+        // 检查是否有主键
+        try {
+            String sql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE " +
+                         "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? " +
+                         "AND CONSTRAINT_NAME = 'PRIMARY' LIMIT 1";
+            
+            String primaryKey = jdbcTemplate.queryForObject(sql, String.class, tableName);
+            if (primaryKey != null) {
+                LOGGER.info("表 {} 使用主键 {} 作为ID字段", tableName, primaryKey);
+                return primaryKey;
+            }
+        } catch (Exception e) {
+            LOGGER.warn("获取表 {} 主键信息失败: {}", tableName, e.getMessage());
+        }
+        
+        // 如果没有找到主键，使用第一个非system_id的列
+        String firstColumn = columnOrder.stream()
+                .filter(col -> !"system_id".equals(col))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("未找到可用的ID字段"));
+        
+        LOGGER.info("表 {} 没有找到主键，使用第一列 {} 作为ID字段", tableName, firstColumn);
+        return firstColumn;
+    }
+
     /**
      * 获取表的列数据类型信息
      * @param tableName 表名

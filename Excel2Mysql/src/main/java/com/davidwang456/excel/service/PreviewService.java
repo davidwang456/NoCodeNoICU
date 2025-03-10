@@ -7,15 +7,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -27,8 +27,6 @@ import com.davidwang456.excel.service.preview.CsvPreviewReader;
 import com.davidwang456.excel.service.preview.ExcelPreviewReader;
 import com.davidwang456.excel.util.ExcelImageExtractor;
 import com.davidwang456.excel.util.PinyinUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Service
 public class PreviewService {
@@ -49,7 +47,8 @@ public class PreviewService {
     @Autowired
     private MongoTableService mongoTableService;
     
-    public PreviewResult previewFile(Path file, String fileExtension, String originalFileName) throws IOException {
+    @SuppressWarnings("unused")
+	public PreviewResult previewFile(Path file, String fileExtension, String originalFileName) throws IOException {
         List<Map<String, Object>> data;
         List<String> headers;
         Map<String, byte[]> imageMap = new HashMap<>();
@@ -129,7 +128,7 @@ public class PreviewService {
             }
             
             // 2. 如果没有基于列名识别到图片列，但有图片数据，尝试找到最合适的列
-            if (imageColumns.isEmpty() && !imageMap.isEmpty()) {
+            if (imageColumns.isEmpty() && imageMap!=null&& !imageMap.isEmpty()) {
                 LOGGER.info("基于列名未识别到图片列，但有{}张图片，尝试找到最合适的列", imageMap.size());
                 
                 // 优先选择名称中包含"pic"的列
@@ -150,7 +149,7 @@ public class PreviewService {
             }
             
             // 3. 如果识别到的图片列数量少于图片数量，且有明确的"pic"列，则只使用该列
-            if (imageMap.size() > imageColumns.size()) {
+            if (imageMap!=null&&imageMap.size() > imageColumns.size()) {
                 // 检查是否有明确的"pic"列
                 boolean hasPicColumn = false;
                 for (String header : headers) {
@@ -182,7 +181,7 @@ public class PreviewService {
             LOGGER.info("最终识别到{}个图片列: {}", imageColumns.size(), imageColumns);
             
             // 如果有多个图片列，确保每列使用不同的图片
-            if (imageColumns.size() > 1 && !imageMap.isEmpty()) {
+            if (imageColumns.size() > 1 && imageMap!=null&&!imageMap.isEmpty()) {
                 LOGGER.info("检测到{}个图片列，确保每列使用不同的图片", imageColumns.size());
                 
                 // 获取所有可用的图片
@@ -211,7 +210,7 @@ public class PreviewService {
                         }
                     }
                 }
-            } else if (imageColumns.size() == 1 && !imageMap.isEmpty()) {
+            } else if (imageColumns.size() == 1 && imageMap!=null&&!imageMap.isEmpty()) {
                 // 单个图片列的处理
                 String header = imageColumns.get(0);
                 LOGGER.info("处理单个图片列: {}", header);
@@ -315,7 +314,6 @@ public class PreviewService {
         return result;
     }
     
-    @SuppressWarnings("unchecked")
     public void importData(String fileId, String dataSource) {
         if (fileId == null || fileId.trim().isEmpty()) {
             throw new IllegalArgumentException("文件ID不能为空");
@@ -414,7 +412,7 @@ public class PreviewService {
                                         if (r == rowIndex && c == colIndex) continue; // 跳过当前单元格
                                         
                                         String otherKey = r + ":" + c;
-                                        if (imageMap.containsKey(otherKey)) {
+                                        if (imageMap!=null&&imageMap.containsKey(otherKey)) {
                                             LOGGER.info("在相邻单元格找到图片: 当前位置=[{},{}], 相邻位置=[{},{}]", 
                                                        rowIndex, colIndex, r, c);
                                             byte[] otherImageData = imageMap.get(otherKey);
@@ -708,7 +706,6 @@ public class PreviewService {
     }
 
     // 使用指定的预览数据进行导入
-    @SuppressWarnings("unchecked")
     public void importDataWithPreview(PreviewResult previewData, String dataSource) {
         if (previewData == null) {
             throw new IllegalStateException("预览数据不存在");

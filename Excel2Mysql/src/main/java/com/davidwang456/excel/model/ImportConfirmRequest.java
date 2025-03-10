@@ -1,25 +1,22 @@
 package com.davidwang456.excel.model;
 
+import lombok.Data;
+
+/**
+ * 导入确认请求
+ */
+@Data
 public class ImportConfirmRequest {
+    /**
+     * 文件名
+     */
     private String fileName;
+    
+    /**
+     * 数据源类型
+     */
     private String dataSource;
-
-    public String getFileName() {
-        return fileName != null ? fileName.trim() : null;
-    }
-
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
-
-    public String getDataSource() {
-        return dataSource;
-    }
-
-    public void setDataSource(String dataSource) {
-        this.dataSource = dataSource;
-    }
-
+    
     @Override
     public String toString() {
         return "ImportConfirmRequest{" +

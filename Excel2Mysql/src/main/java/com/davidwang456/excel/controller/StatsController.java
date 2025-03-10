@@ -119,7 +119,10 @@ public class StatsController {
                 .forEach(doc -> {
                     Map<String, Object> row = new HashMap<>();
                     doc.forEach((key, value) -> {
-                        if (!"_id".equals(key)) {  // 排除 MongoDB 的 _id 字段
+                        // 不过滤任何字段
+                        if (key.equals("_id")) {
+                            row.put(key, value.toString());
+                        } else {
                             row.put(key, value);
                         }
                     });
@@ -135,9 +138,7 @@ public class StatsController {
                 // 如果没有数据，尝试从集合的第一条记录获取字段结构
                 Document firstDoc = mongoCollection.find().first();
                 if (firstDoc != null) {
-                    headers = firstDoc.keySet().stream()
-                        .filter(key -> !"_id".equals(key))
-                        .collect(Collectors.toSet());
+                    headers = firstDoc.keySet();
                 }
             }
             

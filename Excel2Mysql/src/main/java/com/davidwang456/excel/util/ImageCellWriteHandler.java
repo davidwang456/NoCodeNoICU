@@ -1,7 +1,5 @@
 package com.davidwang456.excel.util;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
 

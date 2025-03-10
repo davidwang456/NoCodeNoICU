@@ -208,7 +208,7 @@ const ManagePage = {
                     const originalData = response.data.content;
                     const originalHeaders = response.data.headers;
                     
-                    this.tableHeaders = originalHeaders.filter(header => header !== 'system_id' && header !== '_id');
+                    this.tableHeaders = originalHeaders;
                     
                     this.tableData = originalData;
                     

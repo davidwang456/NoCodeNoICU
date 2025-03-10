@@ -19,6 +19,8 @@ import org.bson.Document;
 import org.bson.types.ObjectId;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
+import org.bson.types.Binary;
+import java.util.Base64;
 
 @Service
 public class MongoTableService {
@@ -155,64 +157,112 @@ public class MongoTableService {
         return formatted;
     }
     public void deleteData(String collectionName, String id) {
-        // 获取列顺序
-        List<String> columnOrder = getColumnOrder(collectionName);
-        if (columnOrder == null || columnOrder.isEmpty()) {
-            throw new RuntimeException("未找到表的列顺序信息");
-        }
-
-        // 找到第一个非_id的列名
-        String firstColumn = columnOrder.stream()
-                .filter(col -> !"_id".equals(col))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("未找到可用的查询列"));
-
         try {
-            // 使用第一个非系统列进行查询和删除
-            Query query = new Query(Criteria.where(firstColumn).is(id));
-            Document doc = mongoTemplate.findOne(query, Document.class, collectionName);
-            if (doc == null) {
-                throw new RuntimeException("未找到要删除的文档");
+            // 尝试将ID转换为ObjectId
+            ObjectId objectId;
+            try {
+                objectId = new ObjectId(id);
+            } catch (IllegalArgumentException e) {
+                LOGGER.warn("无效的ObjectId格式: {}，尝试使用字符串ID", id);
+                // 如果不是有效的ObjectId，尝试使用字符串ID
+                Query query = new Query(Criteria.where("_id").is(id));
+                Document doc = mongoTemplate.findOne(query, Document.class, collectionName);
+                if (doc == null) {
+                    throw new RuntimeException("ID不存在，无法删除数据");
+                }
+                objectId = null;
             }
-
-            // 使用找到的文档的_id进行删除
-            Query deleteQuery = new Query(Criteria.where("_id").is(doc.get("_id")));
-            DeleteResult result = mongoTemplate.remove(deleteQuery, collectionName);
             
+            // 构建查询条件
+            Query query;
+            if (objectId != null) {
+                query = new Query(Criteria.where("_id").is(objectId));
+            } else {
+                query = new Query(Criteria.where("_id").is(id));
+            }
+            
+            DeleteResult result = mongoTemplate.remove(query, collectionName);
             if (result.getDeletedCount() == 0) {
-                throw new RuntimeException("删除文档失败");
+                throw new RuntimeException("ID不存在，无法删除数据");
             }
             
-            LOGGER.info("MongoDB集合 {} 删除文档成功", collectionName);
+            LOGGER.info("MongoDB集合 {} 删除文档成功, _id: {}", collectionName, id);
+        } catch (RuntimeException e) {
+            LOGGER.error("删除MongoDB集合 {} 数据失败: {}", collectionName, e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
+            LOGGER.error("删除MongoDB集合 {} 数据时发生未知错误: {}", collectionName, e.getMessage(), e);
             throw new RuntimeException("删除失败: " + e.getMessage());
         }
     }
 
     public void updateData(String collectionName, String id, Map<String, Object> data) {
         try {
-            // 直接使用 _id 构建查询条件
-            ObjectId objectId = new ObjectId(id);
-            Query query = new Query(Criteria.where("_id").is(objectId));
+            // 尝试将ID转换为ObjectId
+            ObjectId objectId;
+            try {
+                objectId = new ObjectId(id);
+            } catch (IllegalArgumentException e) {
+                LOGGER.warn("无效的ObjectId格式: {}，尝试使用字符串ID", id);
+                // 如果不是有效的ObjectId，尝试使用字符串ID
+                Query query = new Query(Criteria.where("_id").is(id));
+                Document doc = mongoTemplate.findOne(query, Document.class, collectionName);
+                if (doc == null) {
+                    throw new RuntimeException("ID不存在，无法更新数据");
+                }
+                objectId = null;
+            }
+            
+            // 构建查询条件
+            Query query;
+            if (objectId != null) {
+                query = new Query(Criteria.where("_id").is(objectId));
+            } else {
+                query = new Query(Criteria.where("_id").is(id));
+            }
             
             // 构建更新字段
             Update update = new Update();
             for (Map.Entry<String, Object> entry : data.entrySet()) {
                 if (!"_id".equals(entry.getKey())) {  // 跳过_id字段
                     String key = formatFieldName(entry.getKey());
-                    update.set(key, entry.getValue());
+                    
+                    // 处理图片数据
+                    Object value = entry.getValue();
+                    if (value instanceof String && ((String) value).startsWith("data:image/")) {
+                        try {
+                            String base64String = (String) value;
+                            int commaIndex = base64String.indexOf(",");
+                            if (commaIndex > 0) {
+                                String base64Data = base64String.substring(commaIndex + 1);
+                                byte[] imageData = Base64.getDecoder().decode(base64Data);
+                                value = new Binary(imageData);
+                                LOGGER.info("MongoDB图片数据已转换，大小: {} 字节", imageData.length);
+                            }
+                        } catch (Exception e) {
+                            LOGGER.error("处理MongoDB图片数据时出错: {}", e.getMessage(), e);
+                        }
+                    }
+                    
+                    update.set(key, value);
                 }
             }
 
             UpdateResult result = mongoTemplate.updateFirst(query, update, collectionName);
             if (result.getModifiedCount() == 0) {
-                throw new RuntimeException("更新文档失败");
+                if (result.getMatchedCount() > 0) {
+                    LOGGER.info("MongoDB集合 {} 文档匹配但未修改, _id: {}", collectionName, id);
+                } else {
+                    throw new RuntimeException("ID不存在，无法更新数据");
+                }
+            } else {
+                LOGGER.info("MongoDB集合 {} 更新文档成功, _id: {}", collectionName, id);
             }
-            
-            LOGGER.info("MongoDB集合 {} 更新文档成功, _id: {}", collectionName, id);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("无效的ObjectId格式: " + id);
+        } catch (RuntimeException e) {
+            LOGGER.error("更新MongoDB集合 {} 数据失败: {}", collectionName, e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
+            LOGGER.error("更新MongoDB集合 {} 数据时发生未知错误: {}", collectionName, e.getMessage(), e);
             throw new RuntimeException("更新失败: " + e.getMessage());
         }
     }

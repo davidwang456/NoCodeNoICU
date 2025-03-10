@@ -13,27 +13,42 @@ import springfox.documentation.spi.DocumentationType;
 import springfox.documentation.spring.web.plugins.Docket;
 
 /**
-* Swagger配置类
-*/
+ * Swagger API 文档配置
+ */
 @Configuration
 @EnableOpenApi
 public class SwaggerConfig {
+    
     @Bean
-    public Docket docket(){
-       return new Docket(DocumentationType.OAS_30)
-                .apiInfo(apiInfo()).enable(true)
+    public Docket defaultApi(){
+        return new Docket(DocumentationType.OAS_30)
+                .groupName("默认接口")
+                .apiInfo(apiInfo())
+                .enable(true)
                 .select()
                 .apis(RequestHandlerSelectors.basePackage("com.davidwang456.excel"))
                 .paths(PathSelectors.any())
                 .build();
     }
     
+    @Bean
+    public Docket excelApi() {
+        return new Docket(DocumentationType.OAS_30)
+                .groupName("Excel处理接口")
+                .apiInfo(apiInfo())
+                .enable(true)
+                .select()
+                .apis(RequestHandlerSelectors.basePackage("com.davidwang456.excel.controller"))
+                .paths(PathSelectors.any())
+                .build();
+    }
+    
     private ApiInfo apiInfo(){
         return new ApiInfoBuilder()
-                .title("nacos")
-                .description("nacos项目描述")
+                .title("Excel2Mysql API文档")
+                .description("Excel导入MySQL数据库工具接口文档")
                 .contact(new Contact("davidwang456", "www.davidwang456.com", "davidwang456@sina.com"))
-                .version("1.0")
+                .version("1.0.0")
                 .build();
     }
 }

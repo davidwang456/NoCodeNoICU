@@ -65,7 +65,7 @@ public class ExportService {
                     // 获取MongoDB图片字段的索引
                     for (int i = 0; i < headers.size(); i++) {
                         String fieldName = headers.get(i);
-                        if (((MongoDataExporter) exporter).isImageField(tableName, fieldName)) {
+                        if (((MongoDataExporter) exporter).checkImageField(tableName, fieldName)) {
                             imageColumnIndexes.add(i);
                             LOGGER.info("MongoDB字段 '{}' (索引: {}) 是图片字段", fieldName, i);
                         }
