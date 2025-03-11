@@ -184,22 +184,30 @@ const OCRPage = {
             progressPercentage: 0,
             currentProcessingFile: '',
             recognitionResults: [],
+            paginatedRecognitionResults: [], // 分页后的识别结果
+            recognitionCurrentPage: 1, // 当前页码
+            recognitionPageSize: 10, // 每页显示数量
             historyRecords: [],
             editDialogVisible: false,
             viewDialogVisible: false,
             fullImageDialogVisible: false,
             currentFullImage: '',
             editForm: {
+                id: null,
                 questionNumber: '',
                 questionType: '',
                 content: '',
                 paperName: '',
+                paperId: null,
                 year: new Date(),
                 yearDate: null,
                 imageData: '',
                 useImageOnly: false
             },
             viewPaperQuestions: [],
+            paginatedViewPaperQuestions: [], // 分页后的题目列表
+            viewCurrentPage: 1, // 当前页码
+            viewPageSize: 10, // 每页显示数量
             saving: false,
             batchEditDialogVisible: false,
             batchEditForm: {
@@ -215,6 +223,8 @@ const OCRPage = {
     },
     created() {
         this.fetchHistoryRecords();
+        // 初始化分页数据
+        this.updatePaginatedRecognitionResults();
     },
     methods: {
         handleFileChange(file) {
@@ -264,7 +274,20 @@ const OCRPage = {
                     this.progressPercentage = 100;
                     
                     if (response.data.success) {
-                        this.recognitionResults = response.data.questions || [];
+                        // 获取识别结果
+                        let questions = response.data.questions || [];
+                        
+                        // 按照数字感知的方式对题目编号进行排序
+                        questions.sort((a, b) => {
+                            // 提取题目编号中的数字部分
+                            const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
+                            const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
+                            return numA - numB;
+                        });
+                        
+                        this.recognitionResults = questions;
+                        this.recognitionCurrentPage = 1; // 重置页码
+                        this.updatePaginatedRecognitionResults(); // 更新分页数据
                         this.$message.success('OCR识别成功，共识别出 ' + this.recognitionResults.length + ' 道题目');
                         this.activeTab = 'result';
                     } else {
@@ -322,6 +345,16 @@ const OCRPage = {
                     useImageOnly: this.editForm.useImageOnly
                 };
                 
+                // 重新排序
+                this.recognitionResults.sort((a, b) => {
+                    const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
+                    const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
+                    return numA - numB;
+                });
+                
+                // 更新分页数据
+                this.updatePaginatedRecognitionResults();
+                
                 this.$message.success('题目已更新');
                 this.editDialogVisible = false;
                 return;
@@ -367,6 +400,8 @@ const OCRPage = {
                     type: 'warning'
                 }).then(() => {
                     this.recognitionResults.splice(index, 1);
+                    // 更新分页数据
+                    this.updatePaginatedRecognitionResults();
                     this.$message.success('题目已删除');
                 }).catch(() => {});
                 return;
@@ -385,7 +420,15 @@ const OCRPage = {
                                 this.$message.success('题目删除成功');
                                 // 刷新试卷详情
                                 if (this.viewDialogVisible && this.currentViewPaper) {
-                                    this.viewPaper(this.currentViewPaper);
+                                    // 从当前视图中移除该题目
+                                    const index = this.viewPaperQuestions.findIndex(q => q.id === question.id);
+                                    if (index !== -1) {
+                                        this.viewPaperQuestions.splice(index, 1);
+                                        this.updatePaginatedViewPaperQuestions(); // 更新分页数据
+                                    } else {
+                                        // 如果在当前视图中找不到，则重新加载整个试卷
+                                        this.viewPaper(this.currentViewPaper);
+                                    }
                                 }
                             } else {
                                 this.$message.error('题目删除失败：' + response.data.errorMessage);
@@ -457,11 +500,24 @@ const OCRPage = {
         },
         viewPaper(paper) {
             this.currentViewPaper = paper;
+            this.viewCurrentPage = 1; // 重置页码
             
             axios.get('/api/ocr/papers/' + paper.id)
                 .then(response => {
                     if (response.data.success) {
-                        this.viewPaperQuestions = response.data.data.questions || [];
+                        // 获取题目列表
+                        let questions = response.data.data.questions || [];
+                        
+                        // 按照数字感知的方式对题目编号进行排序
+                        questions.sort((a, b) => {
+                            // 提取题目编号中的数字部分
+                            const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
+                            const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
+                            return numA - numB;
+                        });
+                        
+                        this.viewPaperQuestions = questions;
+                        this.updatePaginatedViewPaperQuestions(); // 更新分页数据
                         this.viewDialogVisible = true;
                     } else {
                         this.$message.error('获取试卷详情失败：' + response.data.errorMessage);
@@ -470,6 +526,18 @@ const OCRPage = {
                 .catch(error => {
                     this.$message.error('获取试卷详情失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                 });
+        },
+        // 处理分页变化
+        handleViewPageChange(page) {
+            this.viewCurrentPage = page;
+            this.updatePaginatedViewPaperQuestions();
+        },
+        
+        // 更新分页后的题目列表
+        updatePaginatedViewPaperQuestions() {
+            const start = (this.viewCurrentPage - 1) * this.viewPageSize;
+            const end = start + this.viewPageSize;
+            this.paginatedViewPaperQuestions = this.viewPaperQuestions.slice(start, end);
         },
         deletePaper(paper) {
             this.$confirm('确定要删除这份试卷吗？', '提示', {
@@ -517,25 +585,43 @@ const OCRPage = {
             let updateCount = 0;
             
             for (let i = startIndex; i <= endIndex; i++) {
-                let updated = false;
+                if (i >= this.recognitionResults.length) break;
                 
-                if (this.batchEditForm.questionType !== '') {
+                if (this.batchEditForm.questionType) {
                     this.recognitionResults[i].questionType = this.batchEditForm.questionType;
-                    updated = true;
+                    updateCount++;
                 }
                 
                 if (this.batchEditForm.useImageOnly !== '') {
                     this.recognitionResults[i].useImageOnly = this.batchEditForm.useImageOnly;
-                    updated = true;
-                }
-                
-                if (updated) {
                     updateCount++;
                 }
             }
             
+            // 重新排序
+            this.recognitionResults.sort((a, b) => {
+                const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
+                const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
+                return numA - numB;
+            });
+            
+            // 更新分页数据
+            this.updatePaginatedRecognitionResults();
+            
             this.$message.success('已更新 ' + updateCount + ' 道题目');
             this.batchEditDialogVisible = false;
+        },
+        // 处理识别结果分页变化
+        handleRecognitionPageChange(page) {
+            this.recognitionCurrentPage = page;
+            this.updatePaginatedRecognitionResults();
+        },
+        
+        // 更新分页后的识别结果
+        updatePaginatedRecognitionResults() {
+            const start = (this.recognitionCurrentPage - 1) * this.recognitionPageSize;
+            const end = start + this.recognitionPageSize;
+            this.paginatedRecognitionResults = this.recognitionResults.slice(start, end);
         }
     }
 };

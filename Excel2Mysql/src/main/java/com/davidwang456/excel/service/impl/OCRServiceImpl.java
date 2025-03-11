@@ -863,7 +863,7 @@ public class OCRServiceImpl implements OCRService {
         if (paper != null) {
             // 获取题目列表
             List<ExamQuestion> questions = jdbcTemplate.query(
-                "SELECT * FROM exam_question WHERE paper_id = ? ORDER BY question_number",
+                "SELECT * FROM exam_question WHERE paper_id = ?",
                 new Object[]{paperId},
                 (rs, rowNum) -> {
                     ExamQuestion q = new ExamQuestion();
@@ -881,10 +881,48 @@ public class OCRServiceImpl implements OCRService {
                 }
             );
             
+            // 按照题目编号进行数字感知排序
+            questions.sort((q1, q2) -> {
+                try {
+                    // 尝试提取数字部分进行比较
+                    int num1 = extractNumber(q1.getQuestionNumber());
+                    int num2 = extractNumber(q2.getQuestionNumber());
+                    return Integer.compare(num1, num2);
+                } catch (Exception e) {
+                    // 如果提取失败，则按字符串比较
+                    return q1.getQuestionNumber().compareTo(q2.getQuestionNumber());
+                }
+            });
+            
             paper.setQuestions(questions);
         }
         
         return paper;
+    }
+    
+    /**
+     * 从字符串中提取数字部分
+     * @param str 包含数字的字符串
+     * @return 提取出的数字
+     */
+    private int extractNumber(String str) {
+        if (str == null || str.isEmpty()) {
+            return 0;
+        }
+        
+        // 提取字符串中的数字部分
+        StringBuilder sb = new StringBuilder();
+        for (char c : str.toCharArray()) {
+            if (Character.isDigit(c)) {
+                sb.append(c);
+            }
+        }
+        
+        if (sb.length() > 0) {
+            return Integer.parseInt(sb.toString());
+        }
+        
+        return 0;
     }
     
     @Override
