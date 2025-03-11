@@ -28,6 +28,7 @@ const ImportPage = {
             this.previewLoading = true;
             axios.post('/api/excel/preview', formData)
                 .then(response => {
+                    this.previewPage = 1; // 重置页码
                     this.previewData = response.data.content;
                     this.previewHeaders = response.data.headers;
                     this.previewTotal = response.data.total;
@@ -51,6 +52,22 @@ const ImportPage = {
                 })
                 .catch(() => {
                     this.$message.error('预览失败');
+                })
+                .finally(() => {
+                    this.previewLoading = false;
+                });
+        },
+        handleCurrentChange(page) {
+            this.previewPage = page;
+            this.previewLoading = true;
+            
+            axios.get(`/api/excel/previewData?fileName=${this.fileId}&page=${page}&size=${this.previewPageSize}`)
+                .then(response => {
+                    this.previewData = response.data.content;
+                    this.previewTotal = response.data.total;
+                })
+                .catch(() => {
+                    this.$message.error('加载预览数据失败');
                 })
                 .finally(() => {
                     this.previewLoading = false;
@@ -107,6 +124,7 @@ const ImportPage = {
             this.importing = false;
             this.imageDialogVisible = false;
             this.currentImage = '';
+            this.previewPage = 1;
         }
     }
 };
