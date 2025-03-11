@@ -58,6 +58,7 @@ const ImportPage = {
                 });
         },
         handleCurrentChange(page) {
+            console.log(`页码变更: ${this.previewPage} -> ${page}`);
             this.previewPage = page;
             this.previewLoading = true;
             
@@ -199,6 +200,7 @@ const ManagePage = {
             this.currentTable = '';
             this.tableData = [];
             this.tableHeaders = [];
+            this.currentPage = 1; // 重置页码
             this.fetchTableList();
         },
         fetchTableList() {
@@ -208,6 +210,7 @@ const ManagePage = {
                     this.currentTable = '';
                     this.tableData = [];
                     this.tableHeaders = [];
+                    this.currentPage = 1; // 重置页码
                     if (this.tables && this.tables.length > 0) {
                         this.currentTable = this.tables[0];
                         this.loadTableData();
@@ -221,18 +224,32 @@ const ManagePage = {
             if (!this.currentTable) return;
             
             this.loading = true;
-            axios.get(`/api/excel/data?tableName=${this.currentTable}&dataSource=${this.currentDataSource}`)
+            console.log(`加载表数据: 表=${this.currentTable}, 数据源=${this.currentDataSource}, 页码=${this.currentPage}, 每页大小=${this.pageSize}`);
+            axios.get(`/api/excel/data?tableName=${this.currentTable}&dataSource=${this.currentDataSource}&page=${this.currentPage}&size=${this.pageSize}`)
                 .then(response => {
                     const originalData = response.data.content;
                     const originalHeaders = response.data.headers;
                     
-                    this.tableHeaders = originalHeaders;
+                    console.log('后端返回的表头顺序:', originalHeaders);
                     
-                    this.tableData = originalData;
+                    // 确保使用数组保存表头，保持顺序
+                    this.tableHeaders = Array.isArray(originalHeaders) ? [...originalHeaders] : [];
+                    console.log('前端使用的表头顺序:', this.tableHeaders);
+                    
+                    // 确保数据按照表头顺序组织
+                    this.tableData = originalData.map(row => {
+                        const orderedRow = {};
+                        this.tableHeaders.forEach(header => {
+                            orderedRow[header] = row[header];
+                        });
+                        return orderedRow;
+                    });
                     
                     this.total = response.data.total;
+                    console.log(`数据加载成功: 总数=${this.total}, 当前页数据量=${this.tableData.length}`);
                 })
-                .catch(() => {
+                .catch((error) => {
+                    console.error('加载数据失败:', error);
                     this.$message.error('加载数据失败');
                 })
                 .finally(() => {
@@ -240,12 +257,18 @@ const ManagePage = {
                 });
         },
         handleCurrentChange(page) {
+            console.log(`页码变更: ${this.currentPage} -> ${page}`);
             this.currentPage = page;
             this.loadTableData();
         },
         handleEdit(row) {
-            this.editForm = JSON.parse(JSON.stringify(row));
+            // 创建一个新的有序对象，按照表头顺序组织字段
+            const orderedEditForm = {};
+            this.tableHeaders.forEach(header => {
+                orderedEditForm[header] = row[header];
+            });
             
+            this.editForm = orderedEditForm;
             this.editDialogVisible = true;
         },
         handleDelete(row) {

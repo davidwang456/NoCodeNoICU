@@ -41,27 +41,28 @@
                 :data="tableData"
                 border
                 style="width: 100%">
-                <el-table-column
-                    v-for="header in tableHeaders"
-                    :key="header"
-                    :prop="header"
-                    :label="header">
-                    <template slot-scope="scope">
-                        <!-- 检查是否为Base64编码的图片 -->
-                        <template v-if="scope.row[header] && typeof scope.row[header] === 'string' && scope.row[header].startsWith('data:image/')">
-                            <div style="text-align: center;">
-                                <!-- 使用v-bind:src绑定图片URL，确保Vue正确处理 -->
-                                <img v-bind:src="scope.row[header]" style="max-width: 80px; max-height: 80px; cursor: pointer;" @click="showImageDialog(scope.row[header])" />
-                                <div>
-                                    <el-button type="text" size="mini" @click="showImageDialog(scope.row[header])">查看</el-button>
+                <template v-for="(header, index) in tableHeaders">
+                    <el-table-column
+                        :key="index"
+                        :prop="header"
+                        :label="header">
+                        <template slot-scope="scope">
+                            <!-- 检查是否为Base64编码的图片 -->
+                            <template v-if="scope.row[header] && typeof scope.row[header] === 'string' && scope.row[header].startsWith('data:image/')">
+                                <div style="text-align: center;">
+                                    <!-- 使用v-bind:src绑定图片URL，确保Vue正确处理 -->
+                                    <img v-bind:src="scope.row[header]" style="max-width: 80px; max-height: 80px; cursor: pointer;" @click="showImageDialog(scope.row[header])" />
+                                    <div>
+                                        <el-button type="text" size="mini" @click="showImageDialog(scope.row[header])">查看</el-button>
+                                    </div>
                                 </div>
-                            </div>
+                            </template>
+                            <template v-else>
+                                {{ scope.row[header] }}
+                            </template>
                         </template>
-                        <template v-else>
-                            {{ scope.row[header] }}
-                        </template>
-                    </template>
-                </el-table-column>
+                    </el-table-column>
+                </template>
                 <el-table-column
                     fixed="right"
                     label="操作"
@@ -81,26 +82,27 @@
             
             <el-dialog title="修改数据" :visible.sync="editDialogVisible">
                 <el-form :model="editForm" label-width="120px">
-                    <el-form-item 
-                        v-for="header in tableHeaders" 
-                        :key="header"
-                        :label="header">
-                        <!-- 检查是否为Base64编码的图片 -->
-                        <template v-if="editForm[header] && typeof editForm[header] === 'string' && editForm[header].startsWith('data:image/')">
-                            <div>
-                                <img :src="editForm[header]" style="max-width: 100px; max-height: 100px;" />
-                                <el-upload
-                                    class="upload-demo"
-                                    action="#"
-                                    :auto-upload="false"
-                                    :show-file-list="false"
-                                    :on-change="(file) => handleImageUpload(file, header)">
-                                    <el-button size="small" type="primary">更换图片</el-button>
-                                </el-upload>
-                            </div>
-                        </template>
-                        <el-input v-else v-model="editForm[header]"></el-input>
-                    </el-form-item>
+                    <template v-for="(header, index) in tableHeaders">
+                        <el-form-item 
+                            :key="index"
+                            :label="header">
+                            <!-- 检查是否为Base64编码的图片 -->
+                            <template v-if="editForm[header] && typeof editForm[header] === 'string' && editForm[header].startsWith('data:image/')">
+                                <div>
+                                    <img :src="editForm[header]" style="max-width: 100px; max-height: 100px;" />
+                                    <el-upload
+                                        class="upload-demo"
+                                        action="#"
+                                        :auto-upload="false"
+                                        :show-file-list="false"
+                                        :on-change="(file) => handleImageUpload(file, header)">
+                                        <el-button size="small" type="primary">更换图片</el-button>
+                                    </el-upload>
+                                </div>
+                            </template>
+                            <el-input v-else v-model="editForm[header]"></el-input>
+                        </el-form-item>
+                    </template>
                 </el-form>
                 <div slot="footer" class="dialog-footer">
                     <el-button @click="editDialogVisible = false">取 消</el-button>

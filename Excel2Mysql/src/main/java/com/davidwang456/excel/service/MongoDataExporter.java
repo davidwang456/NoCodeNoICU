@@ -35,6 +35,8 @@ public class MongoDataExporter extends AbstractDataExporter {
                 logger.warn("未找到表 {} 的列信息", tableName);
                 throw DataExportException.columnNotFound(tableName, "*");
             }
+            
+            logger.info("MongoDB导出数据使用有序表头: {}", orderedHeaders);
 
             // 分析集合字段，识别图片字段
             analyzeCollectionFields(tableName);
@@ -45,16 +47,18 @@ public class MongoDataExporter extends AbstractDataExporter {
             return rawData.stream()
                     .map(doc -> {
                         try {
+                            // 使用 LinkedHashMap 保持字段顺序
                             Map<String, Object> row = new LinkedHashMap<>();
-                            // 特殊处理 _id 字段
-                            if (doc.get("_id") != null) {
-                                ObjectId objectId = (ObjectId) doc.get("_id");
-                                row.put("_id", objectId.toString());
-                            }
                             
-                            // 处理其他字段
+                            // 按照有序表头的顺序处理字段
                             for (String header : orderedHeaders) {
-                                if (!header.equals("_id")) {  // 跳过 _id，因为已经处理过了
+                                if ("_id".equals(header)) {
+                                    // 特殊处理 _id 字段
+                                    if (doc.get("_id") != null) {
+                                        ObjectId objectId = (ObjectId) doc.get("_id");
+                                        row.put("_id", objectId.toString());
+                                    }
+                                } else {
                                     String formattedHeader = mongoTableService.formatFieldName(header);
                                     Object value = doc.get(formattedHeader);
                                     
@@ -137,7 +141,14 @@ public class MongoDataExporter extends AbstractDataExporter {
     public List<String> getOrderedHeaders(String tableName) {
         try {
             List<String> orderedHeaders = getOrderedColumnNames(tableName);
-            return orderedHeaders != null ? orderedHeaders : getHeaders(tableName);
+            if (orderedHeaders != null && !orderedHeaders.isEmpty()) {
+                logger.info("MongoDB集合 {} 使用有序表头: {}", tableName, orderedHeaders);
+                return orderedHeaders;
+            } else {
+                List<String> headers = getHeaders(tableName);
+                logger.info("MongoDB集合 {} 使用默认表头: {}", tableName, headers);
+                return headers;
+            }
         } catch (Exception e) {
             logger.error("获取MongoDB表有序列名时出错: 表={}", tableName, e);
             throw DataExportException.exportFailed(tableName, "获取有序列名失败: " + e.getMessage());

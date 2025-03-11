@@ -75,9 +75,28 @@ public class MongoTableService {
         if (metadata != null && metadata.containsKey("column_order")) {
             // 将逗号分隔的字符串转回列表
             String columnOrderStr = metadata.getString("column_order");
-            return Arrays.asList(columnOrderStr.split(","));
+            List<String> columnOrder = Arrays.asList(columnOrderStr.split(","));
+            LOGGER.info("从元数据表获取MongoDB集合 {} 的列顺序: {}", tableName, columnOrder);
+            return columnOrder;
         } else {
             LOGGER.warn("获取MongoDB集合 {} 的列顺序失败: 未找到相关信息", tableName);
+            
+            // 尝试从集合中获取第一条记录的字段顺序
+            try {
+                Document firstDoc = mongoTemplate.findOne(new Query(), Document.class, tableName);
+                if (firstDoc != null) {
+                    List<String> columnOrder = new ArrayList<>(firstDoc.keySet());
+                    LOGGER.info("从第一条记录获取MongoDB集合 {} 的列顺序: {}", tableName, columnOrder);
+                    
+                    // 保存到元数据表中
+                    saveColumnOrder(tableName, columnOrder);
+                    
+                    return columnOrder;
+                }
+            } catch (Exception e) {
+                LOGGER.error("尝试从集合获取列顺序时出错: {}", e.getMessage());
+            }
+            
             return null;
         }
     }
@@ -97,13 +116,18 @@ public class MongoTableService {
         orderedColumns.add("_id"); // 添加 _id 字段
         
         // 格式化其他列名
+        Map<Integer, String> formattedHeadMap = new LinkedHashMap<>();
         for (int i = 0; i < headMap.size(); i++) {
             String columnName = headMap.get(i);
             String formattedName = formatFieldName(columnName);
+            formattedHeadMap.put(i, formattedName);
+            
             if (!"_id".equals(formattedName)) { // 避免重复添加 _id
                 orderedColumns.add(formattedName);
             }
         }
+        
+        LOGGER.info("MongoDB集合 {} 的列顺序: {}", collectionName, orderedColumns);
         
         // 保存列顺序
         saveColumnOrder(collectionName, orderedColumns);
@@ -113,10 +137,23 @@ public class MongoTableService {
             Map<String, Object> document = new LinkedHashMap<>();
             document.put("_id", new ObjectId()); // 为每个文档生成唯一的 _id
             
-            for (int i = 0; i < headMap.size(); i++) {
-                String fieldName = formatFieldName(headMap.get(i));
-                if (!"_id".equals(fieldName)) { // 跳过 _id 字段
-                    Object value = data.get(i);
+            // 按照列顺序添加字段
+            for (String fieldName : orderedColumns) {
+                if ("_id".equals(fieldName)) {
+                    continue; // 跳过 _id 字段，因为已经处理过了
+                }
+                
+                // 查找对应的索引
+                int index = -1;
+                for (Map.Entry<Integer, String> entry : formattedHeadMap.entrySet()) {
+                    if (fieldName.equals(entry.getValue())) {
+                        index = entry.getKey();
+                        break;
+                    }
+                }
+                
+                if (index != -1) {
+                    Object value = data.get(index);
                     
                     // 处理图像数据
                     if (value != null) {

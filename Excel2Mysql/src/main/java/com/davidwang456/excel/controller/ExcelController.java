@@ -127,7 +127,10 @@ public class ExcelController {
             @RequestParam(defaultValue = "MYSQL") String dataSource,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return exportService.getPageData(tableName, dataSource, page, size);
+        System.out.println("接收到分页查询请求: 表名=" + tableName + ", 数据源=" + dataSource + ", 页码=" + page + ", 每页大小=" + size);
+        Map<String, Object> result = exportService.getPageData(tableName, dataSource, page, size);
+        System.out.println("返回分页数据: 总数=" + result.get("total") + ", 当前页数据量=" + ((List<?>)result.get("content")).size());
+        return result;
     }
 
     @PostMapping("/preview")

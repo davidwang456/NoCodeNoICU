@@ -166,12 +166,18 @@ public class ExportService {
     }
 
     public Map<String, Object> getPageData(String tableName, String dataSource, int page, int size) {
+        LOGGER.info("获取分页数据: 表名={}, 数据源={}, 页码={}, 每页大小={}", tableName, dataSource, page, size);
+        
         DataExporter exporter = getExporter(dataSource);
         List<Map<String, Object>> allData = exporter.exportData(tableName);
         List<String> orderedHeaders = exporter.getOrderedHeaders(tableName);
         
+        LOGGER.info("获取到的有序表头: {}", orderedHeaders);
+        
         int start = (page - 1) * size;
         int end = Math.min(start + size, allData.size());
+        
+        LOGGER.info("分页计算: 总数据量={}, 起始索引={}, 结束索引={}", allData.size(), start, end);
         
         // 按照保存的列顺序重新组织数据
         List<Map<String, Object>> orderedData = allData.subList(start, end).stream()
@@ -188,6 +194,8 @@ public class ExportService {
         result.put("content", orderedData);
         result.put("total", allData.size());
         result.put("headers", orderedHeaders);  // 添加有序的表头信息
+        
+        LOGGER.info("返回分页数据: 总数={}, 当前页数据量={}", allData.size(), orderedData.size());
         return result;
     }
     
