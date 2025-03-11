@@ -73,6 +73,10 @@
                             <i class="el-icon-upload"></i>
                             <span slot="title">数据导入</span>
                         </el-menu-item>
+                        <el-menu-item index="/ocr">
+                            <i class="el-icon-picture"></i>
+                            <span slot="title">图片导入数据</span>
+                        </el-menu-item>
                         <el-menu-item index="/manage">
                             <i class="el-icon-s-data"></i>
                             <span slot="title">数据管理</span>
@@ -89,6 +93,7 @@
     <!-- 使用 Thymeleaf 引入模板 -->
     <th:block th:replace="home :: template"></th:block>
     <th:block th:replace="import :: template"></th:block>
+    <th:block th:replace="ocr :: template"></th:block>
     <th:block th:replace="manage :: template"></th:block>
 
     <!-- 引入 JS 文件 -->
