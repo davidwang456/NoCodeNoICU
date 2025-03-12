@@ -47,6 +47,9 @@ public class OCRServiceImpl implements OCRService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
     
+    @Autowired
+    private OCRImageProcessor imageProcessor;
+    
     private Tesseract tesseract;
     
     // 题目类型的正则表达式
@@ -194,172 +197,37 @@ public class OCRServiceImpl implements OCRService {
     }
     
     /**
-     * 处理PDF文件 - 结合OCR识别题目编号和图像切分
+     * 简单题目信息类
      */
-    private List<ExamQuestion> processPdfFileWithOCR(byte[] fileContent, String paperName, String year) {
-        List<ExamQuestion> questions = new ArrayList<>();
+    private static class SimpleQuestionInfo {
+        private String questionNumber;
+        private String questionType;
         
-        try (PDDocument document = PDDocument.load(new ByteArrayInputStream(fileContent))) {
-            PDFRenderer pdfRenderer = new PDFRenderer(document);
-            int pageCount = document.getNumberOfPages();
-            
-            LOGGER.info("PDF文件共有 {} 页", pageCount);
-            
-            // 处理每一页
-            List<BufferedImage> allPageImages = new ArrayList<>();
-            List<List<QuestionBoundary>> allPageBoundaries = new ArrayList<>();
-            
-            for (int i = 0; i < pageCount; i++) {
-                LOGGER.info("处理第 {} 页", i + 1);
-                
-                try {
-                    // 将PDF页面渲染为图像
-                    BufferedImage image = pdfRenderer.renderImageWithDPI(i, 300);
-                    allPageImages.add(image);
-                    
-                    // 识别当前页的题目边界
-                    List<QuestionBoundary> pageBoundaries = identifyQuestionBoundaries(image, i);
-                    allPageBoundaries.add(pageBoundaries);
-                    
-                    LOGGER.info("第 {} 页识别出 {} 个题目边界", i + 1, pageBoundaries.size());
-                } catch (Exception e) {
-                    LOGGER.error("处理第 {} 页时出错: {}", i + 1, e.getMessage(), e);
-                    // 添加一个空的边界列表，确保索引一致性
-                    allPageBoundaries.add(new ArrayList<>());
-                    // 添加一个空白图像，确保索引一致性
-                    BufferedImage blankImage = new BufferedImage(800, 1000, BufferedImage.TYPE_INT_RGB);
-                    Graphics2D g2d = blankImage.createGraphics();
-                    g2d.setColor(Color.WHITE);
-                    g2d.fillRect(0, 0, 800, 1000);
-                    g2d.dispose();
-                    allPageImages.add(blankImage);
-                }
-            }
-            
-            // 处理识别出的题目边界，生成题目
-            int questionIndex = 0;
-            for (int pageIndex = 0; pageIndex < allPageImages.size(); pageIndex++) {
-                BufferedImage pageImage = allPageImages.get(pageIndex);
-                List<QuestionBoundary> pageBoundaries = allPageBoundaries.get(pageIndex);
-                
-                for (QuestionBoundary boundary : pageBoundaries) {
-                    try {
-                        // 根据边界切割图像
-                        BufferedImage questionImage = extractQuestionImage(pageImage, boundary);
-                        
-                        // 增强图像质量
-                        BufferedImage enhancedImage = enhanceMathImage(questionImage);
-                        
-                        // 保存图像为Base64
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        ImageIO.write(enhancedImage, "png", baos);
-                        String base64Image = Base64.getEncoder().encodeToString(baos.toByteArray());
-                        
-                        // 创建题目
-                        ExamQuestion question = new ExamQuestion();
-                        question.setQuestionNumber(boundary.getQuestionNumber());
-                        question.setQuestionType(boundary.getQuestionType());
-                        question.setContent("题目 " + boundary.getQuestionNumber());
-                        question.setImageData("data:image/png;base64," + base64Image);
-                        question.setYear(year);
-                        question.setCreateTime(new Date());
-                        question.setUpdateTime(new Date());
-                        question.setUseImageOnly(true);
-                        
-                        questions.add(question);
-                        questionIndex++;
-                    } catch (Exception e) {
-                        LOGGER.error("处理题目时出错: 页码={}, 题号={}, 错误={}", 
-                                pageIndex + 1, boundary.getQuestionNumber(), e.getMessage());
-                    }
-                }
-            }
-            
-            // 如果没有识别出题目边界，则使用均匀切分的方式
-            if (questions.isEmpty()) {
-                LOGGER.warn("未能识别出题目边界，使用均匀切分方式");
-                return processPdfFileByImage(fileContent, paperName, year);
-            }
-            
-        } catch (Exception e) {
-            LOGGER.error("处理PDF文件失败: {}", e.getMessage(), e);
+        public String getQuestionNumber() {
+            return questionNumber;
         }
         
-        return questions;
+        public void setQuestionNumber(String questionNumber) {
+            this.questionNumber = questionNumber;
+        }
+        
+        public String getQuestionType() {
+            return questionType;
+        }
+        
+        public void setQuestionType(String questionType) {
+            this.questionType = questionType;
+        }
     }
     
     /**
-     * 处理图片文件 - 结合OCR识别题目编号和图像切分
-     */
-    private List<ExamQuestion> processImageFileWithOCR(byte[] fileContent, String paperName, String year) {
-        List<ExamQuestion> questions = new ArrayList<>();
-        
-        try {
-            // 读取图片
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(fileContent));
-            
-            if (image == null) {
-                LOGGER.error("无法读取图片文件");
-                return questions;
-            }
-            
-            // 识别题目边界
-            List<QuestionBoundary> boundaries = identifyQuestionBoundaries(image, 0);
-            LOGGER.info("识别出 {} 个题目边界", boundaries.size());
-            
-            // 处理识别出的题目边界，生成题目
-            for (QuestionBoundary boundary : boundaries) {
-                try {
-                    // 根据边界切割图像
-                    BufferedImage questionImage = extractQuestionImage(image, boundary);
-                    
-                    // 增强图像质量
-                    BufferedImage enhancedImage = enhanceMathImage(questionImage);
-                    
-                    // 保存图像为Base64
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    ImageIO.write(enhancedImage, "png", baos);
-                    String base64Image = Base64.getEncoder().encodeToString(baos.toByteArray());
-                    
-                    // 创建题目
-                    ExamQuestion question = new ExamQuestion();
-                    question.setQuestionNumber(boundary.getQuestionNumber());
-                    question.setQuestionType(boundary.getQuestionType());
-                    question.setContent("题目 " + boundary.getQuestionNumber());
-                    question.setImageData("data:image/png;base64," + base64Image);
-                    question.setYear(year);
-                    question.setCreateTime(new Date());
-                    question.setUpdateTime(new Date());
-                    question.setUseImageOnly(true);
-                    
-                    questions.add(question);
-                } catch (Exception e) {
-                    LOGGER.error("处理题目时出错: 题号={}, 错误={}", 
-                            boundary.getQuestionNumber(), e.getMessage());
-                }
-            }
-            
-            // 如果没有识别出题目边界，则使用均匀切分的方式
-            if (questions.isEmpty()) {
-                LOGGER.warn("未能识别出题目边界，使用均匀切分方式");
-                return processImageFileByImage(fileContent, paperName, year);
-            }
-            
-        } catch (Exception e) {
-            LOGGER.error("处理图片文件失败: {}", e.getMessage(), e);
-        }
-        
-        return questions;
-    }
-    
-    /**
-     * 识别题目边界
+     * 识别题目信息
      * @param image 图像
      * @param pageIndex 页码索引
-     * @return 题目边界列表
+     * @return 题目信息列表
      */
-    private List<QuestionBoundary> identifyQuestionBoundaries(BufferedImage image, int pageIndex) {
-        List<QuestionBoundary> boundaries = new ArrayList<>();
+    private List<SimpleQuestionInfo> identifyQuestionInfo(BufferedImage image, int pageIndex) {
+        List<SimpleQuestionInfo> questionInfoList = new ArrayList<>();
         
         try {
             // 将图像分割成多个区域进行OCR识别
@@ -387,17 +255,14 @@ public class OCRServiceImpl implements OCRService {
                         questionType = typeMatcher.group(1);
                     }
                     
-                    // 创建题目边界
-                    QuestionBoundary boundary = new QuestionBoundary();
-                    boundary.setQuestionNumber(questionNumber);
-                    boundary.setQuestionType(questionType);
-                    boundary.setStartY(y);
-                    boundary.setEndY(y + height);
-                    boundary.setPageIndex(pageIndex);
+                    // 创建题目信息
+                    SimpleQuestionInfo questionInfo = new SimpleQuestionInfo();
+                    questionInfo.setQuestionNumber(questionNumber);
+                    questionInfo.setQuestionType(questionType);
                     
                     // 检查是否已存在相同编号的题目
                     boolean exists = false;
-                    for (QuestionBoundary existing : boundaries) {
+                    for (SimpleQuestionInfo existing : questionInfoList) {
                         if (existing.getQuestionNumber().equals(questionNumber)) {
                             exists = true;
                             break;
@@ -405,189 +270,123 @@ public class OCRServiceImpl implements OCRService {
                     }
                     
                     if (!exists) {
-                        boundaries.add(boundary);
-                        LOGGER.info("识别到题目: 编号={}, 类型={}, 位置={}~{}", 
-                                questionNumber, questionType, boundary.getStartY(), boundary.getEndY());
+                        questionInfoList.add(questionInfo);
+                        LOGGER.info("识别到题目: 编号={}, 类型={}", 
+                                questionNumber, questionType);
                     }
                 }
             }
             
-            // 对识别出的边界进行排序和处理
-            if (!boundaries.isEmpty()) {
+            // 对识别出的题目信息进行排序
+            if (!questionInfoList.isEmpty()) {
                 // 按题目编号排序
-                boundaries.sort(Comparator.comparing(b -> Integer.parseInt(b.getQuestionNumber())));
-                
-                // 计算每个题目的结束位置（下一个题目的开始位置）
-                for (int i = 0; i < boundaries.size() - 1; i++) {
-                    QuestionBoundary current = boundaries.get(i);
-                    QuestionBoundary next = boundaries.get(i + 1);
-                    
-                    // 如果在同一页，则当前题目的结束位置是下一个题目的开始位置
-                    if (current.getPageIndex() == next.getPageIndex()) {
-                        current.setEndY(next.getStartY());
-                    } else {
-                        // 如果不在同一页，则当前题目的结束位置是当前页的底部
-                        current.setEndY(image.getHeight());
-                    }
-                }
-                
-                // 最后一个题目的结束位置是图像的底部
-                QuestionBoundary last = boundaries.get(boundaries.size() - 1);
-                last.setEndY(image.getHeight());
+                questionInfoList.sort(Comparator.comparing(q -> Integer.parseInt(q.getQuestionNumber())));
             }
             
         } catch (Exception e) {
-            LOGGER.error("识别题目边界失败: {}", e.getMessage(), e);
+            LOGGER.error("识别题目信息失败: {}", e.getMessage(), e);
         }
         
-        return boundaries;
+        return questionInfoList;
     }
     
     /**
-     * 根据边界提取题目图像
-     * @param image 原始图像
-     * @param boundary 题目边界
-     * @return 题目图像
+     * 处理PDF文件 - 结合OCR识别题目编号和图像切分
      */
-    private BufferedImage extractQuestionImage(BufferedImage image, QuestionBoundary boundary) {
-        int startY = boundary.getStartY();
-        int endY = boundary.getEndY();
-        
-        // 确保边界在图像范围内
-        startY = Math.max(0, startY);
-        endY = Math.min(image.getHeight(), endY);
-        
-        // 确保高度大于0
-        if (endY <= startY) {
-            LOGGER.warn("题目边界无效: startY={}, endY={}, 使用默认高度", startY, endY);
-            endY = Math.min(startY + 100, image.getHeight());
-        }
-        
-        // 再次检查边界是否有效
-        if (startY >= image.getHeight() || endY <= 0 || endY - startY <= 0) {
-            LOGGER.warn("无法提取题目图像: 边界超出图像范围, 返回空白图像");
-            // 返回一个小的空白图像
-            return new BufferedImage(image.getWidth(), 100, image.getType());
-        }
-        
-        try {
-            // 提取题目图像
-            return image.getSubimage(0, startY, image.getWidth(), endY - startY);
-        } catch (Exception e) {
-            LOGGER.error("提取题目图像失败: {}, startY={}, endY={}, imageHeight={}", 
-                    e.getMessage(), startY, endY, image.getHeight());
-            // 返回一个小的空白图像
-            return new BufferedImage(image.getWidth(), 100, image.getType());
-        }
-    }
-    
-    /**
-     * 题目边界类
-     */
-    private static class QuestionBoundary {
-        private String questionNumber;
-        private String questionType;
-        private int startY;
-        private int endY;
-        private int pageIndex;
-        
-        public String getQuestionNumber() {
-            return questionNumber;
-        }
-        
-        public void setQuestionNumber(String questionNumber) {
-            this.questionNumber = questionNumber;
-        }
-        
-        public String getQuestionType() {
-            return questionType;
-        }
-        
-        public void setQuestionType(String questionType) {
-            this.questionType = questionType;
-        }
-        
-        public int getStartY() {
-            return startY;
-        }
-        
-        public void setStartY(int startY) {
-            this.startY = startY;
-        }
-        
-        public int getEndY() {
-            return endY;
-        }
-        
-        public void setEndY(int endY) {
-            this.endY = endY;
-        }
-        
-        public int getPageIndex() {
-            return pageIndex;
-        }
-        
-        public void setPageIndex(int pageIndex) {
-            this.pageIndex = pageIndex;
-        }
-    }
-    
-    /**
-     * 处理PDF文件 - 直接切图方式
-     */
-    private List<ExamQuestion> processPdfFileByImage(byte[] fileContent, String paperName, String year) {
+    private List<ExamQuestion> processPdfFileWithOCR(byte[] fileContent, String paperName, String year) {
         List<ExamQuestion> questions = new ArrayList<>();
         
-        try (PDDocument document = PDDocument.load(new ByteArrayInputStream(fileContent))) {
-            PDFRenderer pdfRenderer = new PDFRenderer(document);
-            int pageCount = document.getNumberOfPages();
+        try {
+            // 使用PDFBox加载PDF文件
+            PDDocument document = PDDocument.load(new ByteArrayInputStream(fileContent));
+            PDFRenderer renderer = new PDFRenderer(document);
             
-            LOGGER.info("PDF文件共有 {} 页", pageCount);
-            
-            // 估计题目数量
-            int estimatedQuestionCount = estimateQuestionCount(pageCount);
-            LOGGER.info("估计题目数量: {}", estimatedQuestionCount);
-            
-            // 处理每一页
+            // 存储所有页面的图像和题目信息
             List<BufferedImage> allPageImages = new ArrayList<>();
-            for (int i = 0; i < pageCount; i++) {
-                LOGGER.info("处理第 {} 页", i + 1);
-                
-                // 将PDF页面渲染为图像
-                BufferedImage image = pdfRenderer.renderImageWithDPI(i, 300);
+            List<List<SimpleQuestionInfo>> allPageQuestionInfo = new ArrayList<>();
+            
+            // 渲染每一页并识别题目信息
+            for (int i = 0; i < document.getNumberOfPages(); i++) {
+                // 渲染页面为图像
+                BufferedImage image = renderer.renderImageWithDPI(i, 300);
                 allPageImages.add(image);
+                
+                // 识别题目信息
+                List<SimpleQuestionInfo> pageQuestionInfo = identifyQuestionInfo(image, i);
+                allPageQuestionInfo.add(pageQuestionInfo);
+                
+                LOGGER.info("处理PDF第{}页，识别出{}个题目", i + 1, pageQuestionInfo.size());
             }
             
-            // 将所有页面合并为一个大图像
-            BufferedImage mergedImage = mergeImages(allPageImages);
+            // 关闭文档
+            document.close();
             
-            // 增强图像质量
-            BufferedImage enhancedImage = enhanceMathImage(mergedImage);
+            // 检查是否识别出题目信息
+            boolean hasQuestionInfo = allPageQuestionInfo.stream().anyMatch(list -> !list.isEmpty());
+            if (!hasQuestionInfo) {
+                LOGGER.warn("未能识别出题目信息，使用直接切图方式");
+                return processPdfFileByImage(fileContent, paperName, year);
+            }
             
-            // 按题目数量均匀切分图像
-            List<BufferedImage> questionImages = splitImageEvenly(enhancedImage, estimatedQuestionCount);
+            // 处理识别出的题目信息，生成题目
+            int questionCount = 0;
+            for (int pageIndex = 0; pageIndex < allPageImages.size(); pageIndex++) {
+                BufferedImage pageImage = allPageImages.get(pageIndex);
+                List<SimpleQuestionInfo> pageQuestionInfo = allPageQuestionInfo.get(pageIndex);
+                
+                for (SimpleQuestionInfo questionInfo : pageQuestionInfo) {
+                    try {
+                        // 直接使用原始图像
+                        BufferedImage questionImage = pageImage;
+                        
+                        // 为了提高性能，我们可以只处理图像的一部分，而不是整个页面
+                        // 例如，我们可以根据页面高度估计每个题目的大致区域
+                        int estimatedHeight = pageImage.getHeight() / Math.max(1, pageQuestionInfo.size());
+                        int infoIndex = pageQuestionInfo.indexOf(questionInfo);
+                        int startY = Math.max(0, infoIndex * estimatedHeight - 50); // 向上扩展50像素
+                        int endY = Math.min(pageImage.getHeight(), (infoIndex + 1) * estimatedHeight + 50); // 向下扩展50像素
+                        
+                        // 提取题目区域
+                        BufferedImage questionRegion;
+                        try {
+                            questionRegion = pageImage.getSubimage(0, startY, pageImage.getWidth(), endY - startY);
+                        } catch (Exception e) {
+                            LOGGER.warn("无法提取题目区域，使用整个页面: {}", e.getMessage());
+                            questionRegion = pageImage;
+                        }
+                        
+                        // 增强图像质量 - 只处理题目区域，而不是整个页面
+                        BufferedImage enhancedImage = enhanceMathImage(questionRegion);
+                        
+                        // 保存图像为Base64
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        ImageIO.write(enhancedImage, "png", baos);
+                        String base64Image = Base64.getEncoder().encodeToString(baos.toByteArray());
+                        
+                        // 创建题目
+                        ExamQuestion question = new ExamQuestion();
+                        question.setQuestionNumber(questionInfo.getQuestionNumber());
+                        question.setQuestionType(questionInfo.getQuestionType());
+                        question.setContent("题目 " + questionInfo.getQuestionNumber());
+                        question.setImageData("data:image/png;base64," + base64Image);
+                        question.setYear(year);
+                        question.setCreateTime(new Date());
+                        question.setUpdateTime(new Date());
+                        question.setUseImageOnly(true);
+                        
+                        questions.add(question);
+                        questionCount++;
+                    } catch (Exception e) {
+                        LOGGER.error("处理题目时出错: 页码={}, 题号={}, 错误={}", 
+                                pageIndex + 1, questionInfo.getQuestionNumber(), e.getMessage());
+                    }
+                }
+            }
             
-            // 为每个切分的图像创建题目
-            for (int i = 0; i < questionImages.size(); i++) {
-                BufferedImage questionImage = questionImages.get(i);
-                
-                // 保存图像为Base64
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(questionImage, "png", baos);
-                String base64Image = Base64.getEncoder().encodeToString(baos.toByteArray());
-                
-                // 创建题目
-                ExamQuestion question = new ExamQuestion();
-                question.setQuestionNumber(String.valueOf(i + 1));
-                question.setQuestionType("未知");
-                question.setContent("题目 " + (i + 1));
-                question.setImageData("data:image/png;base64," + base64Image);
-                question.setYear(year);
-                question.setCreateTime(new Date());
-                question.setUpdateTime(new Date());
-                question.setUseImageOnly(true);
-                
-                questions.add(question);
+            // 如果没有识别出题目信息，则使用均匀切分的方式
+            if (questions.isEmpty()) {
+                LOGGER.warn("未能识别出题目信息，使用均匀切分方式");
+                return processPdfFileByImage(fileContent, paperName, year);
             }
             
         } catch (Exception e) {
@@ -598,9 +397,9 @@ public class OCRServiceImpl implements OCRService {
     }
     
     /**
-     * 处理图片文件 - 直接切图方式
+     * 处理图片文件 - 结合OCR识别题目编号和图像切分
      */
-    private List<ExamQuestion> processImageFileByImage(byte[] fileContent, String paperName, String year) {
+    private List<ExamQuestion> processImageFileWithOCR(byte[] fileContent, String paperName, String year) {
         List<ExamQuestion> questions = new ArrayList<>();
         
         try {
@@ -612,37 +411,46 @@ public class OCRServiceImpl implements OCRService {
                 return questions;
             }
             
-            // 增强图像质量
-            BufferedImage enhancedImage = enhanceMathImage(image);
+            // 识别题目信息
+            List<SimpleQuestionInfo> questionInfoList = identifyQuestionInfo(image, 0);
+            LOGGER.info("识别出 {} 个题目信息", questionInfoList.size());
             
-            // 估计题目数量
-            int estimatedQuestionCount = estimateQuestionCount(1);
-            LOGGER.info("估计题目数量: {}", estimatedQuestionCount);
+            // 处理识别出的题目信息，生成题目
+            for (SimpleQuestionInfo questionInfo : questionInfoList) {
+                try {
+                    // 直接使用原始图像
+                    BufferedImage questionImage = image;
+                    
+                    // 增强图像质量
+                    BufferedImage enhancedImage = enhanceMathImage(questionImage);
+                    
+                    // 保存图像为Base64
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(enhancedImage, "png", baos);
+                    String base64Image = Base64.getEncoder().encodeToString(baos.toByteArray());
+                    
+                    // 创建题目
+                    ExamQuestion question = new ExamQuestion();
+                    question.setQuestionNumber(questionInfo.getQuestionNumber());
+                    question.setQuestionType(questionInfo.getQuestionType());
+                    question.setContent("题目 " + questionInfo.getQuestionNumber());
+                    question.setImageData("data:image/png;base64," + base64Image);
+                    question.setYear(year);
+                    question.setCreateTime(new Date());
+                    question.setUpdateTime(new Date());
+                    question.setUseImageOnly(true);
+                    
+                    questions.add(question);
+                } catch (Exception e) {
+                    LOGGER.error("处理题目时出错: 题号={}, 错误={}", 
+                            questionInfo.getQuestionNumber(), e.getMessage());
+                }
+            }
             
-            // 按题目数量均匀切分图像
-            List<BufferedImage> questionImages = splitImageEvenly(enhancedImage, estimatedQuestionCount);
-            
-            // 为每个切分的图像创建题目
-            for (int i = 0; i < questionImages.size(); i++) {
-                BufferedImage questionImage = questionImages.get(i);
-                
-                // 保存图像为Base64
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(questionImage, "png", baos);
-                String base64Image = Base64.getEncoder().encodeToString(baos.toByteArray());
-                
-                // 创建题目
-                ExamQuestion question = new ExamQuestion();
-                question.setQuestionNumber(String.valueOf(i + 1));
-                question.setQuestionType("未知");
-                question.setContent("题目 " + (i + 1));
-                question.setImageData("data:image/png;base64," + base64Image);
-                question.setYear(year);
-                question.setCreateTime(new Date());
-                question.setUpdateTime(new Date());
-                question.setUseImageOnly(true);
-                
-                questions.add(question);
+            // 如果没有识别出题目信息，则使用均匀切分的方式
+            if (questions.isEmpty()) {
+                LOGGER.warn("未能识别出题目信息，使用均匀切分方式");
+                return processImageFileByImage(fileContent, paperName, year);
             }
             
         } catch (Exception e) {
@@ -653,131 +461,27 @@ public class OCRServiceImpl implements OCRService {
     }
     
     /**
-     * 估计题目数量
+     * 处理PDF文件 - 直接切图方式
      */
-    private int estimateQuestionCount(int pageCount) {
-        // 根据页数估计题目数量
-        // 一般来说，一页试卷包含5-10道题目
-        return pageCount * 7; // 平均每页7道题
+    private List<ExamQuestion> processPdfFileByImage(byte[] fileContent, String paperName, String year) {
+        // 使用OCRImageProcessor处理PDF文件
+        return imageProcessor.processPdfFileByImage(fileContent, paperName, year);
     }
     
     /**
-     * 合并多个图像为一个大图像
+     * 处理图片文件 - 直接切图方式
      */
-    private BufferedImage mergeImages(List<BufferedImage> images) {
-        if (images.isEmpty()) {
-            return null;
-        }
-        
-        // 计算合并后的图像尺寸
-        int maxWidth = 0;
-        int totalHeight = 0;
-        
-        for (BufferedImage image : images) {
-            maxWidth = Math.max(maxWidth, image.getWidth());
-            totalHeight += image.getHeight();
-        }
-        
-        // 创建合并后的图像
-        BufferedImage mergedImage = new BufferedImage(maxWidth, totalHeight, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2d = mergedImage.createGraphics();
-        
-        // 设置白色背景
-        g2d.setColor(Color.WHITE);
-        g2d.fillRect(0, 0, maxWidth, totalHeight);
-        
-        // 绘制每个图像
-        int y = 0;
-        for (BufferedImage image : images) {
-            g2d.drawImage(image, 0, y, null);
-            y += image.getHeight();
-        }
-        
-        g2d.dispose();
-        
-        return mergedImage;
-    }
-    
-    /**
-     * 均匀切分图像为指定数量的小图像
-     */
-    private List<BufferedImage> splitImageEvenly(BufferedImage image, int count) {
-        List<BufferedImage> result = new ArrayList<>();
-        
-        int width = image.getWidth();
-        int height = image.getHeight();
-        
-        // 每个题目的高度
-        int questionHeight = height / count;
-        
-        // 确保最小高度
-        questionHeight = Math.max(questionHeight, 100);
-        
-        // 实际可以切分的题目数量
-        int actualCount = height / questionHeight;
-        
-        LOGGER.info("图像尺寸: {}x{}, 每题高度: {}, 实际题目数: {}", width, height, questionHeight, actualCount);
-        
-        // 切分图像
-        for (int i = 0; i < actualCount; i++) {
-            int y = i * questionHeight;
-            int h = (i == actualCount - 1) ? (height - y) : questionHeight;
-            
-            BufferedImage questionImage = image.getSubimage(0, y, width, h);
-            result.add(questionImage);
-        }
-        
-        return result;
+    private List<ExamQuestion> processImageFileByImage(byte[] fileContent, String paperName, String year) {
+        // 使用OCRImageProcessor处理图片文件
+        return imageProcessor.processImageFileByImage(fileContent, paperName, year);
     }
     
     /**
      * 增强数学图像的处理
      */
     private BufferedImage enhanceMathImage(BufferedImage image) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-        
-        // 创建新图像
-        BufferedImage enhancedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        
-        // 应用自适应阈值处理，提高数学符号的清晰度
-        int blockSize = 15; // 局部区域大小
-        double c = 8; // 常数，用于调整阈值
-        
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                // 计算局部区域的平均值
-                int sum = 0;
-                int count = 0;
-                
-                for (int ny = Math.max(0, y - blockSize/2); ny < Math.min(height, y + blockSize/2 + 1); ny++) {
-                    for (int nx = Math.max(0, x - blockSize/2); nx < Math.min(width, x + blockSize/2 + 1); nx++) {
-                        int rgb = image.getRGB(nx, ny);
-                        int gray = (rgb >> 16) & 0xff; // 假设是灰度图像
-                        sum += gray;
-                        count++;
-                    }
-                }
-                
-                double mean = sum / (double)count;
-                
-                // 获取当前像素值
-                int rgb = image.getRGB(x, y);
-                int gray = (rgb >> 16) & 0xff;
-                
-                // 应用自适应阈值
-                int newRgb;
-                if (gray < mean - c) {
-                    newRgb = 0x000000; // 黑色
-                } else {
-                    newRgb = 0xffffff; // 白色
-                }
-                
-                enhancedImage.setRGB(x, y, newRgb);
-            }
-        }
-        
-        return enhancedImage;
+        // 使用OCRImageProcessor中的enhanceMathImage方法
+        return imageProcessor.enhanceMathImage(image);
     }
     
     @Override
