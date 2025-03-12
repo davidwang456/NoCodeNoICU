@@ -176,8 +176,7 @@ const OCRPage = {
         return {
             activeTab: 'upload',
             uploadForm: {
-                name: '',
-                year: new Date()
+                name: ''
             },
             fileList: [],
             processing: false,
@@ -199,7 +198,7 @@ const OCRPage = {
                 content: '',
                 paperName: '',
                 paperId: null,
-                year: new Date(),
+                year: '',
                 yearDate: null,
                 imageData: '',
                 useImageOnly: false
@@ -244,21 +243,27 @@ const OCRPage = {
                 return;
             }
             
-            if (!this.uploadForm.name) {
-                this.$message.warning('请输入试卷名称');
-                return;
-            }
-            
             this.processing = true;
             this.progressPercentage = 0;
             this.recognitionResults = [];
             this.currentProcessingFile = this.fileList[0].name;
             
+            // 获取文件名（不含扩展名）作为默认文档名称
+            let fileName = this.fileList[0].name;
+            let paperName = this.uploadForm.name;
+            
+            // 如果用户没有输入文档名称，则使用文件名（不含扩展名）
+            if (!paperName) {
+                // 移除扩展名
+                paperName = fileName.replace(/\.[^/.]+$/, "");
+            }
+            
+            console.log("处理PDF文件 - 文件名:", fileName, "文档名称:", paperName);
+            
             // 创建FormData对象
             const formData = new FormData();
             formData.append('file', this.fileList[0].raw);
-            formData.append('paperName', this.uploadForm.name);
-            formData.append('year', this.uploadForm.year.getFullYear().toString());
+            formData.append('paperName', paperName);
             
             // 模拟进度
             const progressInterval = setInterval(() => {
@@ -268,7 +273,7 @@ const OCRPage = {
             }, 500);
             
             // 发送请求
-            axios.post('/api/ocr/upload', formData)
+            axios.post('/api/pdf/upload', formData)
                 .then(response => {
                     clearInterval(progressInterval);
                     this.progressPercentage = 100;
@@ -277,9 +282,28 @@ const OCRPage = {
                         // 获取识别结果
                         let questions = response.data.questions || [];
                         
-                        // 按照数字感知的方式对题目编号进行排序
+                        console.log("PDF处理成功，获取到", questions.length, "页内容");
+                        
+                        // 检查是否有年份信息
+                        let hasYear = false;
+                        if (questions.length > 0 && questions[0].year) {
+                            hasYear = true;
+                            console.log("从服务器返回的结果中获取到年份:", questions[0].year);
+                        }
+                        
+                        // 如果没有年份信息，设置当前年份
+                        if (!hasYear) {
+                            const currentYear = new Date().getFullYear().toString();
+                            console.log("未获取到年份信息，设置为当前年份:", currentYear);
+                            questions = questions.map(q => ({
+                                ...q,
+                                year: currentYear
+                            }));
+                        }
+                        
+                        // 按照页码排序
                         questions.sort((a, b) => {
-                            // 提取题目编号中的数字部分
+                            // 提取页码中的数字部分
                             const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
                             const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
                             return numA - numB;
@@ -288,16 +312,16 @@ const OCRPage = {
                         this.recognitionResults = questions;
                         this.recognitionCurrentPage = 1; // 重置页码
                         this.updatePaginatedRecognitionResults(); // 更新分页数据
-                        this.$message.success('OCR识别成功，共识别出 ' + this.recognitionResults.length + ' 道题目');
+                        this.$message.success('PDF处理成功，共提取 ' + this.recognitionResults.length + ' 页内容');
                         this.activeTab = 'result';
                     } else {
-                        this.$message.error('OCR识别失败：' + response.data.errorMessage);
+                        this.$message.error('PDF处理失败：' + response.data.errorMessage);
                     }
                 })
                 .catch(error => {
                     clearInterval(progressInterval);
                     this.progressPercentage = 0;
-                    this.$message.error('OCR识别失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                    this.$message.error('PDF处理失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                 })
                 .finally(() => {
                     setTimeout(() => {
@@ -362,7 +386,7 @@ const OCRPage = {
             
             // 如果是编辑已保存的题目
             if (this.editForm.id) {
-                axios.put('/api/ocr/questions/' + this.editForm.id, {
+                axios.put('/api/pdf/questions/' + this.editForm.id, {
                     id: this.editForm.id,
                     questionNumber: this.editForm.questionNumber,
                     questionType: this.editForm.questionType,
@@ -414,7 +438,7 @@ const OCRPage = {
                     cancelButtonText: '取消',
                     type: 'warning'
                 }).then(() => {
-                    axios.delete('/api/ocr/questions/' + question.id)
+                    axios.delete('/api/pdf/questions/' + question.id)
                         .then(response => {
                             if (response.data.success) {
                                 this.$message.success('题目删除成功');
@@ -442,51 +466,85 @@ const OCRPage = {
         },
         saveToDatabase() {
             if (this.recognitionResults.length === 0) {
-                this.$message.warning('没有可保存的题目');
+                this.$message.warning('没有可保存的内容');
                 return;
             }
             
             this.saving = true;
             
             // 获取试卷名称和年份
-            const paperName = this.uploadForm.name || this.recognitionResults[0].paperName;
-            const year = this.uploadForm.year ? this.uploadForm.year.getFullYear().toString() : this.recognitionResults[0].year;
+            let paperName = this.uploadForm.name || '';
             
-            // 确保每个题目都有paperName字段，即使我们在后端不再使用它
+            // 如果uploadForm.name为空，尝试从recognitionResults获取
+            if (!paperName && this.recognitionResults.length > 0 && this.recognitionResults[0].paperName) {
+                paperName = this.recognitionResults[0].paperName;
+            }
+            
+            // 如果仍然为空，使用默认名称
+            if (!paperName) {
+                paperName = "未命名文档";
+                console.log("使用默认文档名称：未命名文档");
+            }
+            
+            // 获取年份
+            let year = '';
+            if (this.recognitionResults.length > 0 && this.recognitionResults[0].year) {
+                year = this.recognitionResults[0].year;
+            } else {
+                // 如果没有年份，使用当前年份
+                year = new Date().getFullYear().toString();
+                console.log("使用当前年份：" + year);
+            }
+            
+            console.log("保存文档 - 名称:", paperName, "年份:", year, "页面数量:", this.recognitionResults.length);
+            
+            // 确保每个题目都有paperName和year字段
             const questions = this.recognitionResults.map(q => {
                 return {
                     ...q,
-                    paperName: paperName
+                    paperName: paperName,
+                    year: year
                 };
             });
             
-            axios.post('/api/ocr/save', {
+            // 检查questions数组是否有内容
+            if (!questions || questions.length === 0) {
+                this.$message.error('没有可保存的内容');
+                this.saving = false;
+                return;
+            }
+            
+            // 构建请求数据
+            const requestData = {
                 paperName: paperName,
                 year: year,
                 questions: questions
-            })
-            .then(response => {
-                if (response.data.success) {
+            };
+            
+            console.log("发送保存请求:", JSON.stringify(requestData).substring(0, 200) + "...");
+            
+            // 发送保存请求
+            axios.post('/api/pdf/save', requestData)
+                .then(response => {
+                    this.saving = false;
+                    console.log("保存成功:", response.data);
                     this.$message.success('保存成功');
+                    
+                    // 清空表单和结果
                     this.recognitionResults = [];
                     this.fileList = [];
                     this.uploadForm.name = '';
-                    this.uploadForm.year = new Date();
                     this.activeTab = 'history';
                     this.fetchHistoryRecords();
-                } else {
-                    this.$message.error('保存失败：' + response.data.errorMessage);
-                }
-            })
-            .catch(error => {
-                this.$message.error('保存失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
-            })
-            .finally(() => {
-                this.saving = false;
-            });
+                })
+                .catch(error => {
+                    this.saving = false;
+                    console.error("保存失败:", error.response?.data || error);
+                    this.$message.error('保存失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                });
         },
         fetchHistoryRecords() {
-            axios.get('/api/ocr/papers')
+            axios.get('/api/pdf/papers')
                 .then(response => {
                     if (response.data.success) {
                         this.historyRecords = response.data.data || [];
@@ -502,7 +560,7 @@ const OCRPage = {
             this.currentViewPaper = paper;
             this.viewCurrentPage = 1; // 重置页码
             
-            axios.get('/api/ocr/papers/' + paper.id)
+            axios.get('/api/pdf/papers/' + paper.id)
                 .then(response => {
                     if (response.data.success) {
                         // 获取题目列表
@@ -545,7 +603,7 @@ const OCRPage = {
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                axios.delete('/api/ocr/papers/' + paper.id)
+                axios.delete('/api/pdf/papers/' + paper.id)
                     .then(response => {
                         if (response.data.success) {
                             this.$message.success('试卷删除成功');

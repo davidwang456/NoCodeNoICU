@@ -2,22 +2,15 @@
     <template id="ocr-template">
         <el-card>
             <div slot="header">
-                <span>图片导入数据</span>
+                <span>PDF文档导入</span>
             </div>
             
             <el-tabs v-model="activeTab">
-                <el-tab-pane label="上传试卷" name="upload">
+                <el-tab-pane label="上传文档" name="upload">
                     <el-form :model="uploadForm" label-width="120px">
-                        <el-form-item label="试卷年份">
-                            <el-date-picker
-                                v-model="uploadForm.year"
-                                type="year"
-                                placeholder="选择年份">
-                            </el-date-picker>
-                        </el-form-item>
-                        
-                        <el-form-item label="试卷名称">
-                            <el-input v-model="uploadForm.name" placeholder="请输入试卷名称"></el-input>
+                        <el-form-item label="文档名称">
+                            <el-input v-model="uploadForm.name" placeholder="留空将自动使用文件名"></el-input>
+                            <div class="el-upload__tip">留空将自动使用上传文件的文件名</div>
                         </el-form-item>
                         
                         <el-form-item label="选择文件">
@@ -30,33 +23,33 @@
                                 :file-list="fileList"
                                 multiple>
                                 <el-button size="small" type="primary">选择文件</el-button>
-                                <div slot="tip" class="el-upload__tip">支持 PDF、JPG、PNG 格式文件</div>
+                                <div slot="tip" class="el-upload__tip">支持 PDF 格式文件</div>
                             </el-upload>
                         </el-form-item>
                         
                         <el-form-item>
-                            <el-button type="primary" @click="startOCR" :loading="processing">开始识别</el-button>
+                            <el-button type="primary" @click="startOCR" :loading="processing">开始处理</el-button>
                         </el-form-item>
                     </el-form>
                     
-                    <!-- 识别进度 -->
+                    <!-- 处理进度 -->
                     <div v-if="processing" style="margin-top: 20px;">
                         <el-progress :percentage="progressPercentage" :text-inside="true" :stroke-width="18"></el-progress>
                         <p>正在处理: {{ currentProcessingFile }}</p>
                     </div>
                 </el-tab-pane>
                 
-                <el-tab-pane label="识别结果" name="result">
+                <el-tab-pane label="处理结果" name="result">
                     <div v-if="recognitionResults.length === 0" style="text-align: center; padding: 20px;">
                         <i class="el-icon-document" style="font-size: 48px; color: #909399;"></i>
-                        <p>暂无识别结果，请先上传试卷并进行识别</p>
+                        <p>暂无处理结果，请先上传文档并进行处理</p>
                     </div>
                     
                     <div v-else>
                         <!-- 添加批量编辑功能按钮 -->
                         <div style="margin-bottom: 15px;">
-                            <el-button type="primary" size="small" @click="batchEditQuestions">批量编辑题目</el-button>
-                            <el-tooltip content="可以在保存前修改识别结果" placement="top">
+                            <el-button type="primary" size="small" @click="batchEditQuestions">批量编辑页面</el-button>
+                            <el-tooltip content="可以在保存前修改处理结果" placement="top">
                                 <i class="el-icon-question" style="margin-left: 5px;"></i>
                             </el-tooltip>
                         </div>
@@ -65,9 +58,9 @@
                             :data="paginatedRecognitionResults"
                             border
                             style="width: 100%">
-                            <el-table-column prop="questionNumber" label="题目编号" width="100"></el-table-column>
-                            <el-table-column prop="questionType" label="题目类型" width="120"></el-table-column>
-                            <el-table-column prop="content" label="题目内容">
+                            <el-table-column prop="questionNumber" label="页码" width="100"></el-table-column>
+                            <el-table-column prop="questionType" label="内容类型" width="120"></el-table-column>
+                            <el-table-column prop="content" label="页面内容">
                                 <template slot-scope="scope">
                                     <div v-if="!scope.row.useImageOnly" v-html="formatContent(scope.row.content)"></div>
                                     <div v-if="scope.row.imageData" class="question-image-container">
@@ -86,7 +79,7 @@
                                     </div>
                                 </template>
                             </el-table-column>
-                            <el-table-column prop="paperName" label="所属试卷" width="150"></el-table-column>
+                            <el-table-column prop="paperName" label="所属文档" width="150"></el-table-column>
                             <el-table-column prop="year" label="年份" width="100"></el-table-column>
                             <el-table-column label="操作" width="150">
                                 <template slot-scope="scope">
@@ -124,9 +117,9 @@
                         :data="historyRecords"
                         border
                         style="width: 100%">
-                        <el-table-column prop="paperName" label="试卷名称" width="200"></el-table-column>
+                        <el-table-column prop="paperName" label="文档名称" width="200"></el-table-column>
                         <el-table-column prop="year" label="年份" width="100"></el-table-column>
-                        <el-table-column prop="questionCount" label="题目数量" width="100"></el-table-column>
+                        <el-table-column prop="questionCount" label="页面数量" width="100"></el-table-column>
                         <el-table-column prop="createTime" label="创建时间" width="180"></el-table-column>
                         <el-table-column label="操作" width="200">
                             <template slot-scope="scope">
@@ -144,22 +137,21 @@
                 </el-tab-pane>
             </el-tabs>
             
-            <!-- 编辑题目对话框 -->
-            <el-dialog title="编辑题目" :visible.sync="editDialogVisible">
+            <!-- 编辑页面对话框 -->
+            <el-dialog title="编辑页面内容" :visible.sync="editDialogVisible">
                 <el-form :model="editForm" label-width="120px">
-                    <el-form-item label="题目编号">
+                    <el-form-item label="页码">
                         <el-input v-model="editForm.questionNumber"></el-input>
                     </el-form-item>
-                    <el-form-item label="题目类型">
-                        <el-select v-model="editForm.questionType" placeholder="请选择题目类型">
-                            <el-option label="选择题" value="选择题"></el-option>
-                            <el-option label="填空题" value="填空题"></el-option>
-                            <el-option label="解答题" value="解答题"></el-option>
-                            <el-option label="判断题" value="判断题"></el-option>
+                    <el-form-item label="内容类型">
+                        <el-select v-model="editForm.questionType" placeholder="请选择内容类型">
+                            <el-option label="页面内容" value="页面内容"></el-option>
+                            <el-option label="目录" value="目录"></el-option>
+                            <el-option label="附录" value="附录"></el-option>
                             <el-option label="其他" value="其他"></el-option>
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="题目内容">
+                    <el-form-item label="页面内容">
                         <el-input type="textarea" v-model="editForm.content" :rows="5"></el-input>
                         <div v-if="editForm.imageData" class="question-image-container" style="margin-top: 10px;">
                             <el-image 
@@ -170,10 +162,10 @@
                             </el-image>
                         </div>
                         <div style="margin-top: 10px;">
-                            <el-checkbox v-model="editForm.useImageOnly">仅使用图像显示（适用于数学公式）</el-checkbox>
+                            <el-checkbox v-model="editForm.useImageOnly">仅使用图像显示</el-checkbox>
                         </div>
                     </el-form-item>
-                    <el-form-item label="所属试卷">
+                    <el-form-item label="所属文档">
                         <el-input v-model="editForm.paperName"></el-input>
                     </el-form-item>
                     <el-form-item label="年份">
@@ -258,15 +250,14 @@
             </el-dialog>
             
             <!-- 批量编辑对话框 -->
-            <el-dialog title="批量编辑题目" :visible.sync="batchEditDialogVisible" width="80%">
+            <el-dialog title="批量编辑页面" :visible.sync="batchEditDialogVisible" width="80%">
                 <el-form :model="batchEditForm" label-width="120px">
-                    <el-form-item label="题目类型">
-                        <el-select v-model="batchEditForm.questionType" placeholder="请选择题目类型">
+                    <el-form-item label="内容类型">
+                        <el-select v-model="batchEditForm.questionType" placeholder="请选择内容类型">
                             <el-option label="不修改" value=""></el-option>
-                            <el-option label="选择题" value="选择题"></el-option>
-                            <el-option label="填空题" value="填空题"></el-option>
-                            <el-option label="解答题" value="解答题"></el-option>
-                            <el-option label="判断题" value="判断题"></el-option>
+                            <el-option label="页面内容" value="页面内容"></el-option>
+                            <el-option label="目录" value="目录"></el-option>
+                            <el-option label="附录" value="附录"></el-option>
                             <el-option label="其他" value="其他"></el-option>
                         </el-select>
                     </el-form-item>
@@ -279,14 +270,14 @@
                     </el-form-item>
                     <el-form-item label="应用范围">
                         <el-radio-group v-model="batchEditForm.applyRange">
-                            <el-radio :label="'all'">所有题目</el-radio>
+                            <el-radio :label="'all'">所有页面</el-radio>
                             <el-radio :label="'range'">指定范围</el-radio>
                         </el-radio-group>
                     </el-form-item>
-                    <el-form-item label="题目范围" v-if="batchEditForm.applyRange === 'range'">
-                        <el-input-number v-model="batchEditForm.startIndex" :min="1" :max="recognitionResults.length" label="起始题号"></el-input-number>
+                    <el-form-item label="页面范围" v-if="batchEditForm.applyRange === 'range'">
+                        <el-input-number v-model="batchEditForm.startIndex" :min="1" :max="recognitionResults.length" label="起始页码"></el-input-number>
                         <span style="margin: 0 10px;">至</span>
-                        <el-input-number v-model="batchEditForm.endIndex" :min="1" :max="recognitionResults.length" label="结束题号"></el-input-number>
+                        <el-input-number v-model="batchEditForm.endIndex" :min="1" :max="recognitionResults.length" label="结束页码"></el-input-number>
                     </el-form-item>
                 </el-form>
                 <div slot="footer" class="dialog-footer">
