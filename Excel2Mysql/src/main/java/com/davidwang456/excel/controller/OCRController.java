@@ -297,6 +297,14 @@ public class OCRController {
         Map<String, Object> response = new HashMap<>();
         
         try {
+            if (query == null || query.trim().isEmpty()) {
+                response.put("success", false);
+                response.put("errorMessage", "搜索关键词不能为空");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            LOGGER.info("接收到搜索请求，关键词: {}", query);
+            
             // 先搜索文件名
             List<ExamPaper> papers = ocrService.searchPapersByName(query);
             
@@ -305,6 +313,7 @@ public class OCRController {
                 List<ExamQuestion> questions = ocrService.searchQuestionsByContent(query);
                 
                 if (questions.isEmpty()) {
+                    LOGGER.info("未找到任何匹配的内容，关键词: {}", query);
                     response.put("success", true);
                     response.put("data", Collections.emptyList());
                     response.put("message", "未找到匹配的内容");
@@ -318,19 +327,35 @@ public class OCRController {
                     for (Long paperId : questionsByPaperId.keySet()) {
                         ExamPaper paper = ocrService.getPaperById(paperId);
                         if (paper != null) {
+                            // 只包含匹配的题目
                             paper.setQuestions(questionsByPaperId.get(paperId));
                             papersByQuestion.add(paper);
                         }
                     }
                     
+                    LOGGER.info("通过内容搜索找到 {} 个文件，共 {} 个匹配页面，关键词: {}", 
+                              papersByQuestion.size(), questions.size(), query);
+                    
                     response.put("success", true);
                     response.put("data", papersByQuestion);
                     response.put("searchType", "question");
+                    response.put("matchCount", questions.size());
+                    response.put("message", String.format("找到 %d 个匹配页面", questions.size()));
                 }
             } else {
+                LOGGER.info("通过文件名搜索找到 {} 个文件，关键词: {}", papers.size(), query);
+                
+                // 计算总页数
+                int totalPages = papers.stream()
+                    .mapToInt(p -> p.getQuestions() != null ? p.getQuestions().size() : 0)
+                    .sum();
+                
                 response.put("success", true);
                 response.put("data", papers);
                 response.put("searchType", "paper");
+                response.put("matchCount", papers.size());
+                response.put("totalPages", totalPages);
+                response.put("message", String.format("找到 %d 个匹配文件，共 %d 页", papers.size(), totalPages));
             }
         } catch (Exception e) {
             LOGGER.error("搜索失败: {}", e.getMessage(), e);

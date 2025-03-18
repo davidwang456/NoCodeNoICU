@@ -1013,7 +1013,8 @@ public class OCRServiceImpl implements OCRService {
     public List<ExamPaper> searchPapersByName(String query) {
         String likeQuery = "%" + query + "%";
         try {
-            return jdbcTemplate.query(
+            // 先获取匹配的文件列表
+            List<ExamPaper> papers = jdbcTemplate.query(
                 "SELECT * FROM exam_paper WHERE paper_name LIKE ?",
                 new Object[]{likeQuery},
                 (rs, rowNum) -> {
@@ -1026,6 +1027,29 @@ public class OCRServiceImpl implements OCRService {
                     return paper;
                 }
             );
+            
+            // 为每个文件加载完整的题目列表
+            for (ExamPaper paper : papers) {
+                List<ExamQuestion> questions = jdbcTemplate.query(
+                    "SELECT * FROM exam_question WHERE paper_id = ? ORDER BY page_number",
+                    new Object[]{paper.getId()},
+                    (rs, rowNum) -> {
+                        ExamQuestion q = new ExamQuestion();
+                        q.setId(rs.getLong("id"));
+                        q.setPaperId(rs.getLong("paper_id"));
+                        q.setPageNumber(rs.getInt("page_number"));
+                        q.setContent(rs.getString("content"));
+                        q.setImageData(rs.getString("image_data"));
+                        q.setPaperName(rs.getString("paper_name"));
+                        q.setCreateTime(rs.getTimestamp("create_time"));
+                        q.setUpdateTime(rs.getTimestamp("update_time"));
+                        return q;
+                    }
+                );
+                paper.setQuestions(questions);
+            }
+            
+            return papers;
         } catch (Exception e) {
             LOGGER.error("搜索文件失败: {}", e.getMessage(), e);
             return new ArrayList<>();
@@ -1036,8 +1060,11 @@ public class OCRServiceImpl implements OCRService {
     public List<ExamQuestion> searchQuestionsByContent(String query) {
         String likeQuery = "%" + query + "%";
         try {
-            return jdbcTemplate.query(
-                "SELECT * FROM exam_question WHERE content LIKE ?",
+            // 搜索内容匹配的题目
+            List<ExamQuestion> questions = jdbcTemplate.query(
+                "SELECT q.*, p.paper_name FROM exam_question q " +
+                "INNER JOIN exam_paper p ON q.paper_id = p.id " +
+                "WHERE q.content LIKE ? ORDER BY q.paper_id, q.page_number",
                 new Object[]{likeQuery},
                 (rs, rowNum) -> {
                     ExamQuestion question = new ExamQuestion();
@@ -1052,6 +1079,22 @@ public class OCRServiceImpl implements OCRService {
                     return question;
                 }
             );
+            
+            // 高亮匹配的内容
+            for (ExamQuestion question : questions) {
+                String content = question.getContent();
+                if (content != null) {
+                    // 在内容中高亮搜索词（简单实现，实际可能需要更复杂的高亮方式）
+                    String queryWithoutWildcards = query.replace("%", "");
+                    String highlightedContent = content.replaceAll(
+                        "(?i)(" + Pattern.quote(queryWithoutWildcards) + ")",
+                        "<span style='background-color:yellow;'>$1</span>"
+                    );
+                    question.setContent(highlightedContent);
+                }
+            }
+            
+            return questions;
         } catch (Exception e) {
             LOGGER.error("搜索题目失败: {}", e.getMessage(), e);
             return new ArrayList<>();

@@ -123,11 +123,21 @@
                         <el-input
                             v-model="searchQuery"
                             placeholder="输入文件名称或内容关键词"
-                            style="width: 300px; margin-right: 10px;">
+                            style="width: 300px; margin-right: 10px;"
+                            @keyup.enter.native="searchPapersOrQuestions">
                         </el-input>
                         <el-button type="primary" @click="searchPapersOrQuestions" :loading="searching">
                             <i class="el-icon-search"></i> 搜索
                         </el-button>
+                        <el-button v-if="searchQuery.trim()" @click="clearSearch" style="margin-left: 10px;">
+                            <i class="el-icon-refresh"></i> 清除搜索
+                        </el-button>
+                    </div>
+                    
+                    <!-- 搜索结果提示 -->
+                    <div v-if="searchQuery.trim() && searchResults.length > 0" style="margin-bottom: 15px; padding: 8px 15px; background-color: #f0f9eb; border-radius: 4px;">
+                        <i class="el-icon-success" style="color: #67c23a;"></i>
+                        <span style="margin-left: 5px;">搜索"{{searchQuery}}"：找到 {{searchResults.length}} 个匹配结果</span>
                     </div>
                     
                     <el-table
@@ -137,6 +147,14 @@
                         <el-table-column prop="paperName" label="文件名称" width="300"></el-table-column>
                         <el-table-column prop="questionCount" label="页面数量" width="120"></el-table-column>
                         <el-table-column prop="createTime" label="创建时间" width="180"></el-table-column>
+                        <el-table-column label="匹配页面" width="120">
+                            <template slot-scope="scope">
+                                <span v-if="scope.row.questions && scope.row.questions.length > 0">
+                                    {{scope.row.questions.length}} 页
+                                </span>
+                                <span v-else>-</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="操作" width="200">
                             <template slot-scope="scope">
                                 <el-button

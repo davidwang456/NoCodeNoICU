@@ -505,25 +505,32 @@ const OCRPage = {
                     this.$message.error('加载检索文件失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                 });
         },
-        viewPaper(paper) {
+        viewPaper(paper, isSearchResult = false) {
             this.currentViewPaper = paper;
             this.viewCurrentPage = 1; // 重置页码
             
-            axios.get('/api/ocr/papers/' + paper.id)
+            // 如果paper已经包含了questions（例如搜索结果），则直接使用
+            if (paper.questions && paper.questions.length > 0) {
+                this.viewPaperQuestions = paper.questions;
+                this.handleViewPageChange(1);
+                this.viewDialogVisible = true;
+                return;
+            }
+            
+            // 否则需要从后端获取题目
+            axios.get(`/api/ocr/papers/${paper.id}`)
                 .then(response => {
                     if (response.data.success) {
-                        // 获取题目列表
-                        let questions = response.data.data.questions || [];
-                        
-                        // 按照数字感知的方式对题目编号进行排序
-                        questions.sort((a, b) => {
-                            // 直接比较页码数字
-                            return a.pageNumber - b.pageNumber;
-                        });
-                        
-                        this.viewPaperQuestions = questions;
-                        this.updatePaginatedViewPaperQuestions(); // 更新分页数据
-                        this.viewDialogVisible = true;
+                        const paperDetail = response.data.data;
+                        if (paperDetail.questions) {
+                            // 按页码排序
+                            paperDetail.questions.sort((a, b) => a.pageNumber - b.pageNumber);
+                            this.viewPaperQuestions = paperDetail.questions;
+                            this.handleViewPageChange(1);
+                            this.viewDialogVisible = true;
+                        } else {
+                            this.$message.warning('该文件没有页面内容');
+                        }
                     } else {
                         this.$message.error('获取文件详情失败：' + response.data.errorMessage);
                     }
@@ -646,15 +653,29 @@ const OCRPage = {
                             // 显示所有记录
                             this.fetchHistoryRecords();
                         } else {
-                            // 显示搜索结果
+                            // 更新界面显示，展示搜索结果
                             this.historyRecords = data;
                             
-                            // 如果是通过内容搜索到的，且只有一个结果，则自动打开查看对话框
-                            if (response.data.searchType === 'question' && data.length === 1) {
-                                this.viewPaper(data[0]);
+                            // 显示搜索匹配信息
+                            const searchType = response.data.searchType;
+                            const matchCount = response.data.matchCount || 0;
+                            const message = response.data.message || '';
+                            
+                            if (message) {
+                                this.$message.success(message);
+                            } else if (searchType === 'paper') {
+                                this.$message.success(`找到 ${matchCount} 个匹配文件`);
+                            } else if (searchType === 'question') {
+                                this.$message.success(`找到 ${matchCount} 个匹配页面`);
                             }
                             
-                            this.$message.success(`找到 ${data.length} 个匹配结果`);
+                            // 如果是通过内容搜索到的，且只有一个结果，则自动打开查看对话框
+                            if (searchType === 'question' && data.length === 1) {
+                                // 延迟一下打开对话框，让用户先看到搜索结果
+                                setTimeout(() => {
+                                    this.viewPaper(data[0], true);
+                                }, 500);
+                            }
                         }
                     } else {
                         this.$message.error('搜索失败：' + response.data.errorMessage);
@@ -670,6 +691,12 @@ const OCRPage = {
                 .finally(() => {
                     this.searching = false;
                 });
+        },
+        clearSearch() {
+            this.searchQuery = '';
+            this.searchResults = [];
+            this.fetchHistoryRecords();
+            this.$message.info('已清除搜索结果');
         }
     }
 };
