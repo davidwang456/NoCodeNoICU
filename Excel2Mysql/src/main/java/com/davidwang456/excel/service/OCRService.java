@@ -15,37 +15,37 @@ public interface OCRService {
     /**
      * 处理OCR识别
      * @param file 文件
-     * @param paperName 试卷名称
+     * @param paperName 文件名称
      * @param year 年份
      * @return OCR识别结果
      */
     OCRResult processOCR(MultipartFile file, String paperName, String year);
     
     /**
-     * 保存试卷和题目
-     * @param paperName 试卷名称
+     * 保存文件和题目
+     * @param paperName 文件名称
      * @param year 年份
      * @param questions 题目列表
-     * @return 试卷ID
+     * @return 文件ID
      */
     Long savePaperAndQuestions(String paperName, String year, List<ExamQuestion> questions);
     
     /**
-     * 获取试卷列表
-     * @return 试卷列表
+     * 获取文件列表
+     * @return 文件列表
      */
     List<ExamPaper> getPaperList();
     
     /**
-     * 获取试卷详情
-     * @param paperId 试卷ID
-     * @return 试卷详情
+     * 获取文件详情
+     * @param paperId 文件ID
+     * @return 文件详情
      */
     ExamPaper getPaperDetail(Long paperId);
     
     /**
-     * 删除试卷
-     * @param paperId 试卷ID
+     * 删除文件
+     * @param paperId 文件ID
      * @return 是否成功
      */
     boolean deletePaper(Long paperId);

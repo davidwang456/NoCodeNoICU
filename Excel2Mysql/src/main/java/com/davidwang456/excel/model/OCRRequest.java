@@ -9,7 +9,7 @@ import java.util.List;
 @Data
 public class OCRRequest {
     /**
-     * 试卷名称
+     * 文件名称
      */
     private String paperName;
     

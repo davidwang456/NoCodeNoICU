@@ -24,7 +24,7 @@ public class OCRResult {
     private List<ExamQuestion> questions;
     
     /**
-     * 试卷ID
+     * 文件ID
      */
     private Long paperId;
 } 

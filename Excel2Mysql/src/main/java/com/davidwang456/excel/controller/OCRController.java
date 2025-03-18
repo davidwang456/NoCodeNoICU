@@ -39,7 +39,7 @@ public class OCRController {
             @RequestParam("year") String year) {
         
         try {
-            LOGGER.info("接收到OCR识别请求: 文件={}, 试卷名称={}, 年份={}", file.getOriginalFilename(), paperName, year);
+            LOGGER.info("接收到OCR识别请求: 文件={}, 文件名称={}, 年份={}", file.getOriginalFilename(), paperName, year);
             
             OCRResult result = ocrService.processOCR(file, paperName, year);
             
@@ -70,7 +70,7 @@ public class OCRController {
                 return ResponseEntity.badRequest().body(error);
             }
             
-            LOGGER.info("接收到保存识别结果请求: 试卷名称={}, 年份={}, 题目数量={}", paperName, year, questionsMapList.size());
+            LOGGER.info("接收到保存识别结果请求: 文档名称={}, 年份={}, 页面数量={}", paperName, year, questionsMapList.size());
             
             // 将Map转换为ExamQuestion对象
             List<ExamQuestion> questions = new ArrayList<>();
@@ -105,23 +105,39 @@ public class OCRController {
                     }
                 }
                 
-                question.setQuestionNumber((String) questionMap.get("questionNumber"));
-                question.setQuestionType((String) questionMap.get("questionType"));
-                question.setContent((String) questionMap.get("content"));
-                question.setImageData((String) questionMap.get("imageData"));
-                question.setYear((String) questionMap.get("year"));
-                
-                // 处理useImageOnly字段
-                Object useImageOnlyObj = questionMap.get("useImageOnly");
-                if (useImageOnlyObj != null) {
-                    if (useImageOnlyObj instanceof Boolean) {
-                        question.setUseImageOnly((Boolean) useImageOnlyObj);
-                    } else if (useImageOnlyObj instanceof String) {
-                        question.setUseImageOnly(Boolean.parseBoolean((String) useImageOnlyObj));
+                // 设置页码
+                if (questionMap.containsKey("pageNumber")) {
+                    Object pageNumberObj = questionMap.get("pageNumber");
+                    if (pageNumberObj instanceof Number) {
+                        question.setPageNumber(((Number) pageNumberObj).intValue());
+                    } else if (pageNumberObj instanceof String) {
+                        try {
+                            question.setPageNumber(Integer.parseInt((String) pageNumberObj));
+                        } catch (NumberFormatException e) {
+                            // 默认设置为1
+                            question.setPageNumber(1);
+                        }
                     }
                 } else {
-                    question.setUseImageOnly(false);
+                    // 如果没有页码，使用questionNumber作为页码（如果存在）
+                    if (questionMap.containsKey("questionNumber")) {
+                        Object questionNumberObj = questionMap.get("questionNumber");
+                        if (questionNumberObj instanceof String) {
+                            try {
+                                question.setPageNumber(Integer.parseInt((String) questionNumberObj));
+                            } catch (NumberFormatException e) {
+                                // 默认设置为1
+                                question.setPageNumber(1);
+                            }
+                        }
+                    } else {
+                        // 默认设置为1
+                        question.setPageNumber(1);
+                    }
                 }
+                
+                question.setContent((String) questionMap.get("content"));
+                question.setImageData((String) questionMap.get("imageData"));
                 
                 // 设置时间字段
                 question.setCreateTime(new Date());
@@ -145,7 +161,7 @@ public class OCRController {
         }
     }
     
-    @ApiOperation("获取试卷列表")
+    @ApiOperation("获取文件列表")
     @GetMapping("/papers")
     public ResponseEntity<?> getPaperList() {
         try {
@@ -156,15 +172,15 @@ public class OCRController {
             response.put("data", papers);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            LOGGER.error("获取试卷列表失败: {}", e.getMessage(), e);
+            LOGGER.error("获取文件列表失败: {}", e.getMessage(), e);
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
-            error.put("errorMessage", "获取试卷列表失败: " + e.getMessage());
+            error.put("errorMessage", "获取文件列表失败: " + e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
     }
     
-    @ApiOperation("获取试卷详情")
+    @ApiOperation("获取文件详情")
     @GetMapping("/papers/{paperId}")
     public ResponseEntity<?> getPaperDetail(@PathVariable Long paperId) {
         try {
@@ -175,15 +191,15 @@ public class OCRController {
             response.put("data", paper);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            LOGGER.error("获取试卷详情失败: {}", e.getMessage(), e);
+            LOGGER.error("获取文件详情失败: {}", e.getMessage(), e);
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
-            error.put("errorMessage", "获取试卷详情失败: " + e.getMessage());
+            error.put("errorMessage", "获取文件详情失败: " + e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
     }
     
-    @ApiOperation("删除试卷")
+    @ApiOperation("删除文件")
     @DeleteMapping("/papers/{paperId}")
     public ResponseEntity<?> deletePaper(@PathVariable Long paperId) {
         try {
@@ -192,14 +208,14 @@ public class OCRController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", result);
             if (!result) {
-                response.put("errorMessage", "删除试卷失败");
+                response.put("errorMessage", "删除文件失败");
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            LOGGER.error("删除试卷失败: {}", e.getMessage(), e);
+            LOGGER.error("删除文件失败: {}", e.getMessage(), e);
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
-            error.put("errorMessage", "删除试卷失败: " + e.getMessage());
+            error.put("errorMessage", "删除文件失败: " + e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
     }

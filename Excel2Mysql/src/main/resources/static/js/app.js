@@ -175,10 +175,7 @@ const OCRPage = {
     data() {
         return {
             activeTab: 'upload',
-            uploadForm: {
-                name: '',
-                year: new Date()
-            },
+            uploadForm: {},
             fileList: [],
             processing: false,
             progressPercentage: 0,
@@ -194,15 +191,11 @@ const OCRPage = {
             currentFullImage: '',
             editForm: {
                 id: null,
-                questionNumber: '',
-                questionType: '',
+                pageNumber: '',
                 content: '',
-                paperName: '',
-                paperId: null,
-                year: new Date(),
-                yearDate: null,
                 imageData: '',
-                useImageOnly: false
+                paperName: '',
+                paperId: null
             },
             viewPaperQuestions: [],
             paginatedViewPaperQuestions: [], // 分页后的题目列表
@@ -244,21 +237,22 @@ const OCRPage = {
                 return;
             }
             
-            if (!this.uploadForm.name) {
-                this.$message.warning('请输入试卷名称');
-                return;
-            }
-            
             this.processing = true;
             this.progressPercentage = 0;
             this.recognitionResults = [];
             this.currentProcessingFile = this.fileList[0].name;
             
+            // 获取文件名（不含扩展名）作为默认文档名称
+            let fileName = this.fileList[0].name;
+            // 移除扩展名
+            let paperName = fileName.replace(/\.[^/.]+$/, "");
+            
+            console.log("处理PDF文件 - 文件名:", fileName, "文档名称:", paperName);
+            
             // 创建FormData对象
             const formData = new FormData();
             formData.append('file', this.fileList[0].raw);
-            formData.append('paperName', this.uploadForm.name);
-            formData.append('year', this.uploadForm.year.getFullYear().toString());
+            formData.append('paperName', paperName);
             
             // 模拟进度
             const progressInterval = setInterval(() => {
@@ -268,30 +262,36 @@ const OCRPage = {
             }, 500);
             
             // 发送请求
-            axios.post('/api/ocr/upload', formData)
+            axios.post('/api/pdf/upload', formData)
                 .then(response => {
                     clearInterval(progressInterval);
                     this.progressPercentage = 100;
                     
                     if (response.data.success) {
                         // 获取识别结果
-                        let questions = response.data.questions || [];
+                        let pages = response.data.questions || [];
                         
-                        // 按照数字感知的方式对题目编号进行排序
-                        questions.sort((a, b) => {
-                            // 提取题目编号中的数字部分
-                            const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
-                            const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
-                            return numA - numB;
+                        console.log("PDF处理成功，获取到", pages.length, "页内容");
+                        
+                        // 为每个页面设置文件名称
+                        pages = pages.map(p => ({
+                            ...p,
+                            paperName: paperName
+                        }));
+                        
+                        // 按照页码排序
+                        pages.sort((a, b) => {
+                            // 直接比较页码数字
+                            return a.pageNumber - b.pageNumber;
                         });
                         
-                        this.recognitionResults = questions;
+                        this.recognitionResults = pages;
                         this.recognitionCurrentPage = 1; // 重置页码
                         this.updatePaginatedRecognitionResults(); // 更新分页数据
-                        this.$message.success('OCR识别成功，共识别出 ' + this.recognitionResults.length + ' 道题目');
+                        this.$message.success('PDF处理成功，共提取 ' + this.recognitionResults.length + ' 页内容');
                         this.activeTab = 'result';
                     } else {
-                        this.$message.error('OCR识别失败：' + response.data.errorMessage);
+                        this.$message.error('PDF处理失败：' + response.data.errorMessage);
                     }
                 })
                 .catch(error => {
@@ -313,83 +313,91 @@ const OCRPage = {
             this.currentEditIndex = index;
             this.editForm = {
                 id: question.id,
-                questionNumber: question.questionNumber,
-                questionType: question.questionType,
+                pageNumber: question.pageNumber,
                 content: question.content,
                 imageData: question.imageData,
                 paperName: question.paperName,
                 paperId: question.paperId,
                 year: question.year,
-                yearDate: question.year ? new Date(question.year) : null,
-                useImageOnly: question.useImageOnly || false
+                yearDate: question.year ? new Date(question.year) : null
             };
             this.editDialogVisible = true;
         },
         confirmEdit() {
-            // 更新年份
-            if (this.editForm.yearDate) {
-                this.editForm.year = this.editForm.yearDate.getFullYear().toString();
+            // 验证表单
+            if (!this.editForm.pageNumber) {
+                this.$message.warning('请输入页码');
+                return;
             }
             
-            // 如果是编辑预览结果中的题目
-            if (this.activeTab === 'result' && this.currentEditIndex >= 0) {
-                // 直接更新预览结果中的题目
+            // 如果是编辑已有的题目
+            if (this.currentEditIndex >= 0) {
+                // 更新本地数据
                 this.recognitionResults[this.currentEditIndex] = {
                     ...this.recognitionResults[this.currentEditIndex],
-                    questionNumber: this.editForm.questionNumber,
-                    questionType: this.editForm.questionType,
+                    pageNumber: this.editForm.pageNumber,
                     content: this.editForm.content,
-                    paperName: this.editForm.paperName,
-                    paperId: this.editForm.paperId,
-                    year: this.editForm.year,
-                    useImageOnly: this.editForm.useImageOnly
+                    paperName: this.editForm.paperName
                 };
                 
                 // 重新排序
                 this.recognitionResults.sort((a, b) => {
-                    const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
-                    const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
-                    return numA - numB;
+                    // 直接比较页码数字
+                    return a.pageNumber - b.pageNumber;
                 });
                 
                 // 更新分页数据
                 this.updatePaginatedRecognitionResults();
                 
-                this.$message.success('题目已更新');
+                this.$message.success('编辑成功');
                 this.editDialogVisible = false;
-                return;
-            }
-            
+            } 
             // 如果是编辑已保存的题目
-            if (this.editForm.id) {
+            else if (this.editForm.id) {
                 axios.put('/api/ocr/questions/' + this.editForm.id, {
                     id: this.editForm.id,
-                    questionNumber: this.editForm.questionNumber,
-                    questionType: this.editForm.questionType,
+                    pageNumber: this.editForm.pageNumber,
                     content: this.editForm.content,
                     imageData: this.editForm.imageData,
                     paperId: this.editForm.paperId,
-                    paperName: this.editForm.paperName,
-                    year: this.editForm.year,
-                    useImageOnly: this.editForm.useImageOnly
+                    paperName: this.editForm.paperName
                 })
                 .then(response => {
                     if (response.data.success) {
-                        this.$message.success('题目更新成功');
-                        // 刷新试卷详情
-                        if (this.viewDialogVisible && this.currentViewPaper) {
-                            this.viewPaper(this.currentViewPaper);
+                        this.$message.success('更新成功');
+                        
+                        // 如果是在查看文件对话框中编辑的
+                        if (this.viewDialogVisible) {
+                            // 更新本地数据
+                            const index = this.viewPaperQuestions.findIndex(q => q.id === this.editForm.id);
+                            if (index >= 0) {
+                                this.viewPaperQuestions[index] = {
+                                    ...this.viewPaperQuestions[index],
+                                    pageNumber: this.editForm.pageNumber,
+                                    content: this.editForm.content,
+                                    paperName: this.editForm.paperName
+                                };
+                                
+                                // 重新排序
+                                this.viewPaperQuestions.sort((a, b) => {
+                                    // 直接比较页码数字
+                                    return a.pageNumber - b.pageNumber;
+                                });
+                                
+                                // 更新分页数据
+                                this.updatePaginatedViewPaperQuestions();
+                            }
                         }
+                        
+                        this.editDialogVisible = false;
                     } else {
-                        this.$message.error('题目更新失败：' + response.data.errorMessage);
+                        this.$message.error('更新失败：' + response.data.errorMessage);
                     }
                 })
                 .catch(error => {
-                    this.$message.error('题目更新失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                    this.$message.error('更新失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                 });
             }
-            
-            this.editDialogVisible = false;
         },
         deleteQuestion(question, index) {
             // 如果是删除预览结果中的题目
@@ -418,7 +426,7 @@ const OCRPage = {
                         .then(response => {
                             if (response.data.success) {
                                 this.$message.success('题目删除成功');
-                                // 刷新试卷详情
+                                // 刷新文件详情
                                 if (this.viewDialogVisible && this.currentViewPaper) {
                                     // 从当前视图中移除该题目
                                     const index = this.viewPaperQuestions.findIndex(q => q.id === question.id);
@@ -426,7 +434,7 @@ const OCRPage = {
                                         this.viewPaperQuestions.splice(index, 1);
                                         this.updatePaginatedViewPaperQuestions(); // 更新分页数据
                                     } else {
-                                        // 如果在当前视图中找不到，则重新加载整个试卷
+                                        // 如果在当前视图中找不到，则重新加载整个文件
                                         this.viewPaper(this.currentViewPaper);
                                     }
                                 }
@@ -448,11 +456,10 @@ const OCRPage = {
             
             this.saving = true;
             
-            // 获取试卷名称和年份
-            const paperName = this.uploadForm.name || this.recognitionResults[0].paperName;
-            const year = this.uploadForm.year ? this.uploadForm.year.getFullYear().toString() : this.recognitionResults[0].year;
+            // 获取文件名称
+            const paperName = this.recognitionResults[0].paperName;
             
-            // 确保每个题目都有paperName字段，即使我们在后端不再使用它
+            // 确保每个题目都有paperName字段
             const questions = this.recognitionResults.map(q => {
                 return {
                     ...q,
@@ -460,9 +467,8 @@ const OCRPage = {
                 };
             });
             
-            axios.post('/api/ocr/save', {
+            axios.post('/api/pdf/save', {
                 paperName: paperName,
-                year: year,
                 questions: questions
             })
             .then(response => {
@@ -470,8 +476,6 @@ const OCRPage = {
                     this.$message.success('保存成功');
                     this.recognitionResults = [];
                     this.fileList = [];
-                    this.uploadForm.name = '';
-                    this.uploadForm.year = new Date();
                     this.activeTab = 'history';
                     this.fetchHistoryRecords();
                 } else {
@@ -491,11 +495,11 @@ const OCRPage = {
                     if (response.data.success) {
                         this.historyRecords = response.data.data || [];
                     } else {
-                        this.$message.error('加载历史记录失败：' + response.data.errorMessage);
+                        this.$message.error('加载检索文件失败：' + response.data.errorMessage);
                     }
                 })
                 .catch(error => {
-                    this.$message.error('加载历史记录失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                    this.$message.error('加载检索文件失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                 });
         },
         viewPaper(paper) {
@@ -510,21 +514,19 @@ const OCRPage = {
                         
                         // 按照数字感知的方式对题目编号进行排序
                         questions.sort((a, b) => {
-                            // 提取题目编号中的数字部分
-                            const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
-                            const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
-                            return numA - numB;
+                            // 直接比较页码数字
+                            return a.pageNumber - b.pageNumber;
                         });
                         
                         this.viewPaperQuestions = questions;
                         this.updatePaginatedViewPaperQuestions(); // 更新分页数据
                         this.viewDialogVisible = true;
                     } else {
-                        this.$message.error('获取试卷详情失败：' + response.data.errorMessage);
+                        this.$message.error('获取文件详情失败：' + response.data.errorMessage);
                     }
                 })
                 .catch(error => {
-                    this.$message.error('获取试卷详情失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                    this.$message.error('获取文件详情失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                 });
         },
         // 处理分页变化
@@ -540,7 +542,7 @@ const OCRPage = {
             this.paginatedViewPaperQuestions = this.viewPaperQuestions.slice(start, end);
         },
         deletePaper(paper) {
-            this.$confirm('确定要删除这份试卷吗？', '提示', {
+            this.$confirm('确定要删除这份文件吗？', '提示', {
                 confirmButtonText: '确定',
                 cancelButtonText: '取消',
                 type: 'warning'
@@ -548,14 +550,14 @@ const OCRPage = {
                 axios.delete('/api/ocr/papers/' + paper.id)
                     .then(response => {
                         if (response.data.success) {
-                            this.$message.success('试卷删除成功');
+                            this.$message.success('文件删除成功');
                             this.fetchHistoryRecords();
                         } else {
-                            this.$message.error('试卷删除失败：' + response.data.errorMessage);
+                            this.$message.error('文件删除失败：' + response.data.errorMessage);
                         }
                     })
                     .catch(error => {
-                        this.$message.error('试卷删除失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                        this.$message.error('文件删除失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
                     });
             }).catch(() => {});
         },
@@ -600,9 +602,8 @@ const OCRPage = {
             
             // 重新排序
             this.recognitionResults.sort((a, b) => {
-                const numA = parseInt(a.questionNumber.replace(/\D/g, '')) || 0;
-                const numB = parseInt(b.questionNumber.replace(/\D/g, '')) || 0;
-                return numA - numB;
+                // 直接比较页码数字
+                return a.pageNumber - b.pageNumber;
             });
             
             // 更新分页数据

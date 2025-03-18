@@ -1,3 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>PDF导入数据</title>
+</head>
+<body>
 <th:block th:fragment="template">
     <template id="ocr-template">
         <el-card>
@@ -6,20 +14,8 @@
             </div>
             
             <el-tabs v-model="activeTab">
-                <el-tab-pane label="上传试卷" name="upload">
+                <el-tab-pane label="上传文件" name="upload">
                     <el-form :model="uploadForm" label-width="120px">
-                        <el-form-item label="试卷年份">
-                            <el-date-picker
-                                v-model="uploadForm.year"
-                                type="year"
-                                placeholder="选择年份">
-                            </el-date-picker>
-                        </el-form-item>
-                        
-                        <el-form-item label="试卷名称">
-                            <el-input v-model="uploadForm.name" placeholder="请输入试卷名称"></el-input>
-                        </el-form-item>
-                        
                         <el-form-item label="选择文件">
                             <el-upload
                                 class="upload-demo"
@@ -30,7 +26,7 @@
                                 :file-list="fileList"
                                 multiple>
                                 <el-button size="small" type="primary">选择文件</el-button>
-                                <div slot="tip" class="el-upload__tip">支持 PDF、JPG、PNG 格式文件</div>
+                                <div slot="tip" class="el-upload__tip">支持 PDF、JPG、PNG 格式文件（文件名将作为文件名称）</div>
                             </el-upload>
                         </el-form-item>
                         
@@ -49,7 +45,7 @@
                 <el-tab-pane label="识别结果" name="result">
                     <div v-if="recognitionResults.length === 0" style="text-align: center; padding: 20px;">
                         <i class="el-icon-document" style="font-size: 48px; color: #909399;"></i>
-                        <p>暂无识别结果，请先上传试卷并进行识别</p>
+                        <p>暂无识别结果，请先上传文件并进行识别</p>
                     </div>
                     
                     <div v-else>
@@ -65,11 +61,14 @@
                             :data="paginatedRecognitionResults"
                             border
                             style="width: 100%">
-                            <el-table-column prop="questionNumber" label="题目编号" width="100"></el-table-column>
-                            <el-table-column prop="questionType" label="题目类型" width="120"></el-table-column>
-                            <el-table-column prop="content" label="题目内容">
+                            <el-table-column prop="pageNumber" label="页码" width="80"></el-table-column>
+                            <el-table-column prop="content" label="文字内容">
                                 <template slot-scope="scope">
-                                    <div v-if="!scope.row.useImageOnly" v-html="formatContent(scope.row.content)"></div>
+                                    <div v-html="formatContent(scope.row.content)"></div>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="页面图像" width="300">
+                                <template slot-scope="scope">
                                     <div v-if="scope.row.imageData" class="question-image-container">
                                         <el-image 
                                             :src="scope.row.imageData" 
@@ -86,8 +85,7 @@
                                     </div>
                                 </template>
                             </el-table-column>
-                            <el-table-column prop="paperName" label="所属试卷" width="150"></el-table-column>
-                            <el-table-column prop="year" label="年份" width="100"></el-table-column>
+                            <el-table-column prop="paperName" label="所属文件" width="200"></el-table-column>
                             <el-table-column label="操作" width="150">
                                 <template slot-scope="scope">
                                     <el-button
@@ -119,14 +117,13 @@
                     </div>
                 </el-tab-pane>
                 
-                <el-tab-pane label="历史记录" name="history">
+                <el-tab-pane label="检索文件" name="history">
                     <el-table
                         :data="historyRecords"
                         border
                         style="width: 100%">
-                        <el-table-column prop="paperName" label="试卷名称" width="200"></el-table-column>
-                        <el-table-column prop="year" label="年份" width="100"></el-table-column>
-                        <el-table-column prop="questionCount" label="题目数量" width="100"></el-table-column>
+                        <el-table-column prop="paperName" label="文件名称" width="300"></el-table-column>
+                        <el-table-column prop="questionCount" label="页面数量" width="120"></el-table-column>
                         <el-table-column prop="createTime" label="创建时间" width="180"></el-table-column>
                         <el-table-column label="操作" width="200">
                             <template slot-scope="scope">
@@ -147,19 +144,10 @@
             <!-- 编辑题目对话框 -->
             <el-dialog title="编辑题目" :visible.sync="editDialogVisible">
                 <el-form :model="editForm" label-width="120px">
-                    <el-form-item label="题目编号">
-                        <el-input v-model="editForm.questionNumber"></el-input>
+                    <el-form-item label="页码">
+                        <el-input v-model="editForm.pageNumber" type="number"></el-input>
                     </el-form-item>
-                    <el-form-item label="题目类型">
-                        <el-select v-model="editForm.questionType" placeholder="请选择题目类型">
-                            <el-option label="选择题" value="选择题"></el-option>
-                            <el-option label="填空题" value="填空题"></el-option>
-                            <el-option label="解答题" value="解答题"></el-option>
-                            <el-option label="判断题" value="判断题"></el-option>
-                            <el-option label="其他" value="其他"></el-option>
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="题目内容">
+                    <el-form-item label="页面内容">
                         <el-input type="textarea" v-model="editForm.content" :rows="5"></el-input>
                         <div v-if="editForm.imageData" class="question-image-container" style="margin-top: 10px;">
                             <el-image 
@@ -169,19 +157,9 @@
                                 style="max-height: 200px; max-width: 100%;">
                             </el-image>
                         </div>
-                        <div style="margin-top: 10px;">
-                            <el-checkbox v-model="editForm.useImageOnly">仅使用图像显示（适用于数学公式）</el-checkbox>
-                        </div>
                     </el-form-item>
-                    <el-form-item label="所属试卷">
+                    <el-form-item label="所属文件">
                         <el-input v-model="editForm.paperName"></el-input>
-                    </el-form-item>
-                    <el-form-item label="年份">
-                        <el-date-picker
-                            v-model="editForm.yearDate"
-                            type="year"
-                            placeholder="选择年份">
-                        </el-date-picker>
                     </el-form-item>
                 </el-form>
                 <div slot="footer" class="dialog-footer">
@@ -190,17 +168,20 @@
                 </div>
             </el-dialog>
             
-            <!-- 查看试卷对话框 -->
-            <el-dialog title="查看试卷" :visible.sync="viewDialogVisible" width="80%">
+            <!-- 查看文件对话框 -->
+            <el-dialog title="查看文件" :visible.sync="viewDialogVisible" width="80%">
                 <el-table
                     :data="paginatedViewPaperQuestions"
                     border
                     style="width: 100%">
-                    <el-table-column prop="questionNumber" label="题目编号" width="100"></el-table-column>
-                    <el-table-column prop="questionType" label="题目类型" width="120"></el-table-column>
-                    <el-table-column prop="content" label="题目内容">
+                    <el-table-column prop="pageNumber" label="页码" width="80"></el-table-column>
+                    <el-table-column prop="content" label="文字内容">
                         <template slot-scope="scope">
-                            <div v-if="!scope.row.useImageOnly" v-html="formatContent(scope.row.content)"></div>
+                            <div v-html="formatContent(scope.row.content)"></div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="页面图像" width="300">
+                        <template slot-scope="scope">
                             <div v-if="scope.row.imageData" class="question-image-container">
                                 <el-image 
                                     :src="scope.row.imageData" 
@@ -306,4 +287,6 @@
         background-color: #f8f8f8;
     }
     </style>
-</th:block> 
+</th:block>
+</body>
+</html> 

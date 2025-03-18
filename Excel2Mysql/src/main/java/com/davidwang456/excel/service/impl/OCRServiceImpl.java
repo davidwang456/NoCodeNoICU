@@ -36,6 +36,8 @@ import java.util.regex.Pattern;
 
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
+import java.sql.SQLException;
+import net.sourceforge.tess4j.ITessAPI;
 
 /**
  * OCR服务实现类
@@ -60,7 +62,6 @@ public class OCRServiceImpl implements OCRService {
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS exam_paper (" +
                     "id BIGINT PRIMARY KEY AUTO_INCREMENT, " +
                     "paper_name VARCHAR(255) NOT NULL, " +
-                    "year VARCHAR(10) NOT NULL, " +
                     "question_count INT DEFAULT 0, " +
                     "create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
                     "update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
@@ -70,34 +71,71 @@ public class OCRServiceImpl implements OCRService {
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS exam_question (" +
                     "id BIGINT PRIMARY KEY AUTO_INCREMENT, " +
                     "paper_id BIGINT NOT NULL, " +
-                    "question_number VARCHAR(20) NOT NULL, " +
-                    "question_type VARCHAR(50) NOT NULL, " +
+                    "page_number INT NOT NULL, " +
                     "content TEXT NOT NULL, " +
                     "image_data LONGTEXT, " +
-                    "year VARCHAR(10) NOT NULL, " +
-                    "use_image_only BOOLEAN DEFAULT FALSE, " +
                     "create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
                     "update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
                     "FOREIGN KEY (paper_id) REFERENCES exam_paper(id) ON DELETE CASCADE" +
                     ")");
             
-            // 检查是否需要移除paper_name列
+            // 检查是否需要移除exam_paper表中的year列
             try {
-                jdbcTemplate.execute("SELECT paper_name FROM exam_question LIMIT 1");
+                jdbcTemplate.execute("SELECT year FROM exam_paper LIMIT 1");
                 // 如果没有抛出异常，说明列存在，需要移除
-                LOGGER.info("移除exam_question表中的paper_name列");
-                jdbcTemplate.execute("ALTER TABLE exam_question DROP COLUMN paper_name");
+                LOGGER.info("移除exam_paper表中的year列");
+                jdbcTemplate.execute("ALTER TABLE exam_paper DROP COLUMN year");
             } catch (Exception e) {
                 // 列不存在，无需处理
             }
             
-            // 检查是否需要添加use_image_only列
+            // 检查是否需要移除exam_question表中的year列
+            try {
+                jdbcTemplate.execute("SELECT year FROM exam_question LIMIT 1");
+                // 如果没有抛出异常，说明列存在，需要移除
+                LOGGER.info("移除exam_question表中的year列");
+                jdbcTemplate.execute("ALTER TABLE exam_question DROP COLUMN year");
+            } catch (Exception e) {
+                // 列不存在，无需处理
+            }
+            
+            // 检查是否需要移除exam_question表中的question_number列
+            try {
+                jdbcTemplate.execute("SELECT question_number FROM exam_question LIMIT 1");
+                // 如果没有抛出异常，说明列存在，需要移除
+                LOGGER.info("移除exam_question表中的question_number列");
+                jdbcTemplate.execute("ALTER TABLE exam_question DROP COLUMN question_number");
+            } catch (Exception e) {
+                // 列不存在，无需处理
+            }
+            
+            // 检查是否需要移除exam_question表中的question_type列
+            try {
+                jdbcTemplate.execute("SELECT question_type FROM exam_question LIMIT 1");
+                // 如果没有抛出异常，说明列存在，需要移除
+                LOGGER.info("移除exam_question表中的question_type列");
+                jdbcTemplate.execute("ALTER TABLE exam_question DROP COLUMN question_type");
+            } catch (Exception e) {
+                // 列不存在，无需处理
+            }
+            
+            // 检查是否需要移除exam_question表中的use_image_only列
             try {
                 jdbcTemplate.execute("SELECT use_image_only FROM exam_question LIMIT 1");
+                // 如果没有抛出异常，说明列存在，需要移除
+                LOGGER.info("移除exam_question表中的use_image_only列");
+                jdbcTemplate.execute("ALTER TABLE exam_question DROP COLUMN use_image_only");
+            } catch (Exception e) {
+                // 列不存在，无需处理
+            }
+            
+            // 检查是否需要添加page_number列
+            try {
+                jdbcTemplate.execute("SELECT page_number FROM exam_question LIMIT 1");
             } catch (Exception e) {
                 // 列不存在，添加它
-                LOGGER.info("添加use_image_only列到exam_question表");
-                jdbcTemplate.execute("ALTER TABLE exam_question ADD COLUMN use_image_only BOOLEAN DEFAULT FALSE");
+                LOGGER.info("添加page_number列到exam_question表");
+                jdbcTemplate.execute("ALTER TABLE exam_question ADD COLUMN page_number INT NOT NULL DEFAULT 1");
             }
             
             // 检查paper_id是否为NOT NULL
@@ -105,51 +143,27 @@ public class OCRServiceImpl implements OCRService {
                 jdbcTemplate.execute("ALTER TABLE exam_question MODIFY paper_id BIGINT NOT NULL");
                 LOGGER.info("修改paper_id为NOT NULL约束");
             } catch (Exception e) {
-                LOGGER.error("修改paper_id约束失败: {}", e.getMessage());
+                // 忽略错误
             }
             
             LOGGER.info("OCR相关表创建/更新成功");
             
             // 初始化Tesseract
-            initTesseract();
-            
-        } catch (Exception e) {
-            LOGGER.error("创建/更新OCR相关表失败: {}", e.getMessage(), e);
-        }
-    }
-    
-    /**
-     * 初始化Tesseract OCR引擎
-     */
-    private void initTesseract() {
-        try {
             tesseract = new Tesseract();
             
-            // 检查tessdata目录是否存在，不存在则创建
-            Path tessdataPath = Paths.get("tessdata");
-            if (!Files.exists(tessdataPath)) {
-                Files.createDirectories(tessdataPath);
-                LOGGER.info("创建tessdata目录: {}", tessdataPath.toAbsolutePath());
-            }
+            // 设置Tesseract数据目录，可以根据实际情况修改
+            String datapath = "tessdata";
+            tesseract.setDatapath(datapath);
             
-            // 设置tessdata路径
-            tesseract.setDatapath(tessdataPath.toAbsolutePath().toString());
-            
-            // 设置语言为中文和英文
+            // 设置OCR语言，chi_sim是中文简体，eng是英文
             tesseract.setLanguage("chi_sim+eng");
             
-            // 设置OCR引擎模式
-            tesseract.setOcrEngineMode(1);
-            
-            // 设置页面分割模式
-            tesseract.setPageSegMode(3);
-            
-            // 设置白名单字符
-            tesseract.setTessVariable("tessedit_char_whitelist", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:()[]{}?!+-*/=<>\"'\\|_@#$%^&~`");
+            // 设置识别模式为完整页面
+            tesseract.setPageSegMode(ITessAPI.TessPageSegMode.PSM_AUTO);
             
             LOGGER.info("Tesseract OCR引擎初始化成功");
         } catch (Exception e) {
-            LOGGER.error("Tesseract OCR引擎初始化失败: {}", e.getMessage(), e);
+            LOGGER.error("初始化OCR相关表失败: {}", e.getMessage(), e);
         }
     }
     
@@ -158,7 +172,7 @@ public class OCRServiceImpl implements OCRService {
         OCRResult result = new OCRResult();
         
         try {
-            LOGGER.info("接收到OCR识别请求: 文件={}, 试卷名称={}, 年份={}", file.getOriginalFilename(), paperName, year);
+            LOGGER.info("接收到OCR识别请求: 文件={}, 文件名称={}, 年份={}", file.getOriginalFilename(), paperName, year);
             
             // 读取文件内容
             byte[] fileContent = file.getBytes();
@@ -257,14 +271,11 @@ public class OCRServiceImpl implements OCRService {
                         
                         // 创建题目
                         ExamQuestion question = new ExamQuestion();
-                        question.setQuestionNumber(boundary.getQuestionNumber());
-                        question.setQuestionType(boundary.getQuestionType());
+                        question.setPageNumber(Integer.parseInt(boundary.getQuestionNumber()));
                         question.setContent("题目 " + boundary.getQuestionNumber());
                         question.setImageData("data:image/png;base64," + base64Image);
-                        question.setYear(year);
                         question.setCreateTime(new Date());
                         question.setUpdateTime(new Date());
-                        question.setUseImageOnly(true);
                         
                         questions.add(question);
                         questionIndex++;
@@ -323,14 +334,11 @@ public class OCRServiceImpl implements OCRService {
                     
                     // 创建题目
                     ExamQuestion question = new ExamQuestion();
-                    question.setQuestionNumber(boundary.getQuestionNumber());
-                    question.setQuestionType(boundary.getQuestionType());
+                    question.setPageNumber(Integer.parseInt(boundary.getQuestionNumber()));
                     question.setContent("题目 " + boundary.getQuestionNumber());
                     question.setImageData("data:image/png;base64," + base64Image);
-                    question.setYear(year);
                     question.setCreateTime(new Date());
                     question.setUpdateTime(new Date());
-                    question.setUseImageOnly(true);
                     
                     questions.add(question);
                 } catch (Exception e) {
@@ -578,14 +586,11 @@ public class OCRServiceImpl implements OCRService {
                 
                 // 创建题目
                 ExamQuestion question = new ExamQuestion();
-                question.setQuestionNumber(String.valueOf(i + 1));
-                question.setQuestionType("未知");
+                question.setPageNumber(i + 1);
                 question.setContent("题目 " + (i + 1));
                 question.setImageData("data:image/png;base64," + base64Image);
-                question.setYear(year);
                 question.setCreateTime(new Date());
                 question.setUpdateTime(new Date());
-                question.setUseImageOnly(true);
                 
                 questions.add(question);
             }
@@ -633,14 +638,11 @@ public class OCRServiceImpl implements OCRService {
                 
                 // 创建题目
                 ExamQuestion question = new ExamQuestion();
-                question.setQuestionNumber(String.valueOf(i + 1));
-                question.setQuestionType("未知");
+                question.setPageNumber(i + 1);
                 question.setContent("题目 " + (i + 1));
                 question.setImageData("data:image/png;base64," + base64Image);
-                question.setYear(year);
                 question.setCreateTime(new Date());
                 question.setUpdateTime(new Date());
-                question.setUseImageOnly(true);
                 
                 questions.add(question);
             }
@@ -657,7 +659,7 @@ public class OCRServiceImpl implements OCRService {
      */
     private int estimateQuestionCount(int pageCount) {
         // 根据页数估计题目数量
-        // 一般来说，一页试卷包含5-10道题目
+        // 一般来说，一页文件包含5-10道题目
         return pageCount * 7; // 平均每页7道题
     }
     
@@ -784,16 +786,15 @@ public class OCRServiceImpl implements OCRService {
     @Transactional
     public Long savePaperAndQuestions(String paperName, String year, List<ExamQuestion> questions) {
         try {
-            // 保存试卷
+            // 保存文件
             KeyHolder keyHolder = new GeneratedKeyHolder();
             jdbcTemplate.update(connection -> {
                 PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO exam_paper (paper_name, year, question_count) VALUES (?, ?, ?)",
+                    "INSERT INTO exam_paper (paper_name, question_count) VALUES (?, ?)",
                     Statement.RETURN_GENERATED_KEYS
                 );
                 ps.setString(1, paperName);
-                ps.setString(2, year);
-                ps.setInt(3, questions.size());
+                ps.setInt(2, questions.size());
                 return ps;
             }, keyHolder);
             
@@ -805,22 +806,21 @@ public class OCRServiceImpl implements OCRService {
                 question.setPaperId(paperId);
                 
                 jdbcTemplate.update(
-                    "INSERT INTO exam_question (paper_id, question_number, question_type, content, image_data, year, use_image_only) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO exam_question (paper_id, page_number, content, image_data, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?)",
                     paperId,
-                    question.getQuestionNumber(),
-                    question.getQuestionType(),
+                    question.getPageNumber(),
                     question.getContent(),
                     question.getImageData(),
-                    year,
-                    question.getUseImageOnly() != null ? question.getUseImageOnly() : false
+                    new Timestamp(System.currentTimeMillis()),
+                    new Timestamp(System.currentTimeMillis())
                 );
             }
             
-            LOGGER.info("保存试卷成功: id={}, 试卷名称={}, 年份={}, 题目数量={}", paperId, paperName, year, questions.size());
+            LOGGER.info("保存文件成功: id={}, 文件名称={}, 题目数量={}", paperId, paperName, questions.size());
             
             return paperId;
         } catch (Exception e) {
-            LOGGER.error("保存试卷失败: {}", e.getMessage(), e);
+            LOGGER.error("保存文件失败: {}", e.getMessage(), e);
             throw e;
         }
     }
@@ -833,7 +833,6 @@ public class OCRServiceImpl implements OCRService {
                 ExamPaper paper = new ExamPaper();
                 paper.setId(rs.getLong("id"));
                 paper.setPaperName(rs.getString("paper_name"));
-                paper.setYear(rs.getString("year"));
                 paper.setQuestionCount(rs.getInt("question_count"));
                 paper.setCreateTime(rs.getTimestamp("create_time"));
                 paper.setUpdateTime(rs.getTimestamp("update_time"));
@@ -844,7 +843,7 @@ public class OCRServiceImpl implements OCRService {
     
     @Override
     public ExamPaper getPaperDetail(Long paperId) {
-        // 获取试卷信息
+        // 获取文件信息
         ExamPaper paper = jdbcTemplate.queryForObject(
             "SELECT * FROM exam_paper WHERE id = ?",
             new Object[]{paperId},
@@ -852,7 +851,6 @@ public class OCRServiceImpl implements OCRService {
                 ExamPaper p = new ExamPaper();
                 p.setId(rs.getLong("id"));
                 p.setPaperName(rs.getString("paper_name"));
-                p.setYear(rs.getString("year"));
                 p.setQuestionCount(rs.getInt("question_count"));
                 p.setCreateTime(rs.getTimestamp("create_time"));
                 p.setUpdateTime(rs.getTimestamp("update_time"));
@@ -868,31 +866,18 @@ public class OCRServiceImpl implements OCRService {
                 (rs, rowNum) -> {
                     ExamQuestion q = new ExamQuestion();
                     q.setId(rs.getLong("id"));
-                    q.setQuestionNumber(rs.getString("question_number"));
-                    q.setQuestionType(rs.getString("question_type"));
+                    q.setPageNumber(rs.getInt("page_number"));
                     q.setContent(rs.getString("content"));
                     q.setImageData(rs.getString("image_data"));
                     q.setPaperId(rs.getLong("paper_id"));
-                    q.setYear(rs.getString("year"));
                     q.setCreateTime(rs.getTimestamp("create_time"));
                     q.setUpdateTime(rs.getTimestamp("update_time"));
-                    q.setUseImageOnly(rs.getBoolean("use_image_only"));
                     return q;
                 }
             );
             
-            // 按照题目编号进行数字感知排序
-            questions.sort((q1, q2) -> {
-                try {
-                    // 尝试提取数字部分进行比较
-                    int num1 = extractNumber(q1.getQuestionNumber());
-                    int num2 = extractNumber(q2.getQuestionNumber());
-                    return Integer.compare(num1, num2);
-                } catch (Exception e) {
-                    // 如果提取失败，则按字符串比较
-                    return q1.getQuestionNumber().compareTo(q2.getQuestionNumber());
-                }
-            });
+            // 按照页码进行排序
+            questions.sort(Comparator.comparingInt(ExamQuestion::getPageNumber));
             
             paper.setQuestions(questions);
         }
@@ -937,25 +922,22 @@ public class OCRServiceImpl implements OCRService {
     public boolean updateQuestion(ExamQuestion question) {
         try {
             int result = jdbcTemplate.update(
-                "UPDATE exam_question SET question_number = ?, question_type = ?, content = ?, " +
-                "image_data = ?, paper_id = ?, year = ?, use_image_only = ?, update_time = ? WHERE id = ?",
-                question.getQuestionNumber(),
-                question.getQuestionType(),
+                "UPDATE exam_question SET page_number = ?, content = ?, " +
+                "image_data = ?, paper_id = ?, update_time = ? WHERE id = ?",
+                question.getPageNumber(),
                 question.getContent(),
                 question.getImageData(),
                 question.getPaperId(),
-                question.getYear(),
-                question.getUseImageOnly() != null ? question.getUseImageOnly() : false,
                 new Timestamp(System.currentTimeMillis()),
                 question.getId()
             );
             
-            LOGGER.info("更新题目{}: id={}", result > 0 ? "成功" : "失败", question.getId());
+            LOGGER.info("更新题目成功: id={}", question.getId());
             
             return result > 0;
         } catch (Exception e) {
             LOGGER.error("更新题目失败: {}", e.getMessage(), e);
-            return false;
+            throw e;
         }
     }
     
@@ -963,7 +945,7 @@ public class OCRServiceImpl implements OCRService {
     @Transactional
     public boolean deleteQuestion(Long questionId) {
         try {
-            // 获取题目所属的试卷ID
+            // 获取题目所属的文件ID
             Long paperId = jdbcTemplate.queryForObject(
                 "SELECT paper_id FROM exam_question WHERE id = ?",
                 new Object[]{questionId},
@@ -974,7 +956,7 @@ public class OCRServiceImpl implements OCRService {
             int result = jdbcTemplate.update("DELETE FROM exam_question WHERE id = ?", questionId);
             
             if (result > 0 && paperId != null) {
-                // 更新试卷的题目数量
+                // 更新文件的题目数量
                 jdbcTemplate.update(
                     "UPDATE exam_paper SET question_count = (SELECT COUNT(*) FROM exam_question WHERE paper_id = ?) WHERE id = ?",
                     paperId, paperId
@@ -998,15 +980,12 @@ public class OCRServiceImpl implements OCRService {
                 (rs, rowNum) -> {
                     ExamQuestion q = new ExamQuestion();
                     q.setId(rs.getLong("id"));
-                    q.setQuestionNumber(rs.getString("question_number"));
-                    q.setQuestionType(rs.getString("question_type"));
+                    q.setPageNumber(rs.getInt("page_number"));
                     q.setContent(rs.getString("content"));
                     q.setImageData(rs.getString("image_data"));
                     q.setPaperId(rs.getLong("paper_id"));
-                    q.setYear(rs.getString("year"));
                     q.setCreateTime(rs.getTimestamp("create_time"));
                     q.setUpdateTime(rs.getTimestamp("update_time"));
-                    q.setUseImageOnly(rs.getBoolean("use_image_only"));
                     return q;
                 }
             );
