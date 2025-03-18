@@ -185,6 +185,9 @@ const OCRPage = {
             recognitionCurrentPage: 1, // 当前页码
             recognitionPageSize: 10, // 每页显示数量
             historyRecords: [],
+            searchQuery: '', // 搜索关键词
+            searching: false, // 搜索中状态
+            searchResults: [], // 搜索结果
             editDialogVisible: false,
             viewDialogVisible: false,
             fullImageDialogVisible: false,
@@ -623,6 +626,50 @@ const OCRPage = {
             const start = (this.recognitionCurrentPage - 1) * this.recognitionPageSize;
             const end = start + this.recognitionPageSize;
             this.paginatedRecognitionResults = this.recognitionResults.slice(start, end);
+        },
+        searchPapersOrQuestions() {
+            if (!this.searchQuery.trim()) {
+                this.$message.warning('请输入搜索关键词');
+                return;
+            }
+            
+            this.searching = true;
+            
+            axios.get(`/api/ocr/search?query=${encodeURIComponent(this.searchQuery)}`)
+                .then(response => {
+                    if (response.data.success) {
+                        const data = response.data.data || [];
+                        this.searchResults = data;
+                        
+                        if (data.length === 0) {
+                            this.$message.info('未找到匹配的内容');
+                            // 显示所有记录
+                            this.fetchHistoryRecords();
+                        } else {
+                            // 显示搜索结果
+                            this.historyRecords = data;
+                            
+                            // 如果是通过内容搜索到的，且只有一个结果，则自动打开查看对话框
+                            if (response.data.searchType === 'question' && data.length === 1) {
+                                this.viewPaper(data[0]);
+                            }
+                            
+                            this.$message.success(`找到 ${data.length} 个匹配结果`);
+                        }
+                    } else {
+                        this.$message.error('搜索失败：' + response.data.errorMessage);
+                        // 显示所有记录
+                        this.fetchHistoryRecords();
+                    }
+                })
+                .catch(error => {
+                    this.$message.error('搜索失败：' + (error.response?.data?.errorMessage || error.message || '未知错误'));
+                    // 显示所有记录
+                    this.fetchHistoryRecords();
+                })
+                .finally(() => {
+                    this.searching = false;
+                });
         }
     }
 };

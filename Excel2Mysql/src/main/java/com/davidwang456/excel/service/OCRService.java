@@ -22,6 +22,24 @@ public interface OCRService {
     OCRResult processOCR(MultipartFile file, String paperName, String year);
     
     /**
+     * 对图片进行OCR处理
+     * @param fileContent 文件内容
+     * @param paperName 文件名称
+     * @param year 年份
+     * @return 识别结果列表
+     */
+    List<ExamQuestion> processImageFile(byte[] fileContent, String paperName, String year);
+    
+    /**
+     * 对PDF文件进行处理
+     * @param fileContent 文件内容
+     * @param paperName 文件名称
+     * @param year 年份
+     * @return 识别结果列表
+     */
+    List<ExamQuestion> processPdfFile(byte[] fileContent, String paperName, String year);
+    
+    /**
      * 保存文件和题目
      * @param paperName 文件名称
      * @param year 年份
@@ -31,17 +49,17 @@ public interface OCRService {
     Long savePaperAndQuestions(String paperName, String year, List<ExamQuestion> questions);
     
     /**
-     * 获取文件列表
+     * 获取所有文件
      * @return 文件列表
      */
-    List<ExamPaper> getPaperList();
+    List<ExamPaper> getAllPapers();
     
     /**
-     * 获取文件详情
+     * 根据ID获取文件详情
      * @param paperId 文件ID
      * @return 文件详情
      */
-    ExamPaper getPaperDetail(Long paperId);
+    ExamPaper getPaperById(Long paperId);
     
     /**
      * 删除文件
@@ -70,4 +88,18 @@ public interface OCRService {
      * @return 题目
      */
     ExamQuestion getQuestionById(Long questionId);
+    
+    /**
+     * 根据文件名称搜索文件
+     * @param query 搜索关键字
+     * @return 匹配的文件列表
+     */
+    List<ExamPaper> searchPapersByName(String query);
+    
+    /**
+     * 根据内容搜索题目
+     * @param query 搜索关键字
+     * @return 匹配的题目列表
+     */
+    List<ExamQuestion> searchQuestionsByContent(String query);
 } 

@@ -11,6 +11,7 @@ public class ExamQuestion {
     private int pageNumber;
     private String content;
     private String imageData;
+    private String paperName;
     private Date createTime;
     private Date updateTime;
 
@@ -53,6 +54,14 @@ public class ExamQuestion {
 
     public void setImageData(String imageData) {
         this.imageData = imageData;
+    }
+
+    public String getPaperName() {
+        return paperName;
+    }
+
+    public void setPaperName(String paperName) {
+        this.paperName = paperName;
     }
 
     public Date getCreateTime() {

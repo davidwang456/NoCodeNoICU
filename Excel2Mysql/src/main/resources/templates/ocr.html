@@ -118,6 +118,18 @@
                 </el-tab-pane>
                 
                 <el-tab-pane label="检索文件" name="history">
+                    <!-- 搜索栏 -->
+                    <div style="margin-bottom: 20px; display: flex;">
+                        <el-input
+                            v-model="searchQuery"
+                            placeholder="输入文件名称或内容关键词"
+                            style="width: 300px; margin-right: 10px;">
+                        </el-input>
+                        <el-button type="primary" @click="searchPapersOrQuestions" :loading="searching">
+                            <i class="el-icon-search"></i> 搜索
+                        </el-button>
+                    </div>
+                    
                     <el-table
                         :data="historyRecords"
                         border

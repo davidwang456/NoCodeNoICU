@@ -14,10 +14,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * OCR控制器
@@ -163,40 +165,46 @@ public class OCRController {
     
     @ApiOperation("获取文件列表")
     @GetMapping("/papers")
-    public ResponseEntity<?> getPaperList() {
+    public ResponseEntity<Map<String, Object>> getPapers() {
+        Map<String, Object> response = new HashMap<>();
+        
         try {
-            List<ExamPaper> papers = ocrService.getPaperList();
+            List<ExamPaper> papers = ocrService.getAllPapers();
             
-            Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("data", papers);
-            return ResponseEntity.ok(response);
         } catch (Exception e) {
             LOGGER.error("获取文件列表失败: {}", e.getMessage(), e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("errorMessage", "获取文件列表失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            response.put("success", false);
+            response.put("errorMessage", "获取文件列表失败: " + e.getMessage());
         }
+        
+        return ResponseEntity.ok(response);
     }
     
     @ApiOperation("获取文件详情")
     @GetMapping("/papers/{paperId}")
-    public ResponseEntity<?> getPaperDetail(@PathVariable Long paperId) {
+    public ResponseEntity<Map<String, Object>> getPaper(@PathVariable Long paperId) {
+        Map<String, Object> response = new HashMap<>();
+        
         try {
-            ExamPaper paper = ocrService.getPaperDetail(paperId);
+            ExamPaper paper = ocrService.getPaperById(paperId);
             
-            Map<String, Object> response = new HashMap<>();
+            if (paper == null) {
+                response.put("success", false);
+                response.put("errorMessage", "文件不存在");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
             response.put("success", true);
             response.put("data", paper);
-            return ResponseEntity.ok(response);
         } catch (Exception e) {
             LOGGER.error("获取文件详情失败: {}", e.getMessage(), e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("errorMessage", "获取文件详情失败: " + e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            response.put("success", false);
+            response.put("errorMessage", "获取文件详情失败: " + e.getMessage());
         }
+        
+        return ResponseEntity.ok(response);
     }
     
     @ApiOperation("删除文件")
@@ -279,5 +287,57 @@ public class OCRController {
             error.put("errorMessage", "删除题目失败: " + e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
+    }
+
+    /**
+     * 搜索文件或题目
+     */
+    @GetMapping("/search")
+    public ResponseEntity<Map<String, Object>> searchPapersOrQuestions(@RequestParam String query) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            // 先搜索文件名
+            List<ExamPaper> papers = ocrService.searchPapersByName(query);
+            
+            if (papers.isEmpty()) {
+                // 如果没有找到匹配的文件名，则搜索题目内容
+                List<ExamQuestion> questions = ocrService.searchQuestionsByContent(query);
+                
+                if (questions.isEmpty()) {
+                    response.put("success", true);
+                    response.put("data", Collections.emptyList());
+                    response.put("message", "未找到匹配的内容");
+                } else {
+                    // 找到匹配的题目，将它们按文件分组
+                    Map<Long, List<ExamQuestion>> questionsByPaperId = questions.stream()
+                            .collect(Collectors.groupingBy(ExamQuestion::getPaperId));
+                    
+                    // 获取这些题目对应的文件信息
+                    List<ExamPaper> papersByQuestion = new ArrayList<>();
+                    for (Long paperId : questionsByPaperId.keySet()) {
+                        ExamPaper paper = ocrService.getPaperById(paperId);
+                        if (paper != null) {
+                            paper.setQuestions(questionsByPaperId.get(paperId));
+                            papersByQuestion.add(paper);
+                        }
+                    }
+                    
+                    response.put("success", true);
+                    response.put("data", papersByQuestion);
+                    response.put("searchType", "question");
+                }
+            } else {
+                response.put("success", true);
+                response.put("data", papers);
+                response.put("searchType", "paper");
+            }
+        } catch (Exception e) {
+            LOGGER.error("搜索失败: {}", e.getMessage(), e);
+            response.put("success", false);
+            response.put("errorMessage", "搜索失败: " + e.getMessage());
+        }
+        
+        return ResponseEntity.ok(response);
     }
 } 

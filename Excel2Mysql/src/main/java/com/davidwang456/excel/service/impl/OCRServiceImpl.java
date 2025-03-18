@@ -4,11 +4,13 @@ import com.davidwang456.excel.model.ExamPaper;
 import com.davidwang456.excel.model.ExamQuestion;
 import com.davidwang456.excel.model.OCRResult;
 import com.davidwang456.excel.service.OCRService;
+
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -74,6 +76,7 @@ public class OCRServiceImpl implements OCRService {
                     "page_number INT NOT NULL, " +
                     "content TEXT NOT NULL, " +
                     "image_data LONGTEXT, " +
+                    "paper_name VARCHAR(255), " +
                     "create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
                     "update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
                     "FOREIGN KEY (paper_id) REFERENCES exam_paper(id) ON DELETE CASCADE" +
@@ -144,6 +147,13 @@ public class OCRServiceImpl implements OCRService {
                 LOGGER.info("修改paper_id为NOT NULL约束");
             } catch (Exception e) {
                 // 忽略错误
+            }
+            
+            // 检查是否需要添加paper_name列
+            try {
+                jdbcTemplate.execute("ALTER TABLE exam_question ADD COLUMN IF NOT EXISTS paper_name VARCHAR(255)");
+            } catch (Exception e) {
+                LOGGER.warn("添加paper_name列失败，可能已存在: {}", e.getMessage());
             }
             
             LOGGER.info("OCR相关表创建/更新成功");
@@ -802,15 +812,17 @@ public class OCRServiceImpl implements OCRService {
             
             // 保存题目
             for (ExamQuestion question : questions) {
-                // 设置paperId
+                // 设置paperId和paperName
                 question.setPaperId(paperId);
+                question.setPaperName(paperName);
                 
                 jdbcTemplate.update(
-                    "INSERT INTO exam_question (paper_id, page_number, content, image_data, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO exam_question (paper_id, page_number, content, image_data, paper_name, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     paperId,
                     question.getPageNumber(),
                     question.getContent(),
                     question.getImageData(),
+                    paperName,
                     new Timestamp(System.currentTimeMillis()),
                     new Timestamp(System.currentTimeMillis())
                 );
@@ -826,88 +838,88 @@ public class OCRServiceImpl implements OCRService {
     }
     
     @Override
-    public List<ExamPaper> getPaperList() {
-        return jdbcTemplate.query(
-            "SELECT * FROM exam_paper ORDER BY create_time DESC",
-            (rs, rowNum) -> {
-                ExamPaper paper = new ExamPaper();
-                paper.setId(rs.getLong("id"));
-                paper.setPaperName(rs.getString("paper_name"));
-                paper.setQuestionCount(rs.getInt("question_count"));
-                paper.setCreateTime(rs.getTimestamp("create_time"));
-                paper.setUpdateTime(rs.getTimestamp("update_time"));
-                return paper;
-            }
-        );
+    public List<ExamPaper> getAllPapers() {
+        try {
+            return jdbcTemplate.query(
+                "SELECT * FROM exam_paper ORDER BY create_time DESC",
+                (rs, rowNum) -> {
+                    ExamPaper paper = new ExamPaper();
+                    paper.setId(rs.getLong("id"));
+                    paper.setPaperName(rs.getString("paper_name"));
+                    paper.setQuestionCount(rs.getInt("question_count"));
+                    paper.setCreateTime(rs.getTimestamp("create_time"));
+                    paper.setUpdateTime(rs.getTimestamp("update_time"));
+                    return paper;
+                }
+            );
+        } catch (Exception e) {
+            LOGGER.error("获取文件列表失败: {}", e.getMessage(), e);
+            return new ArrayList<>();
+        }
     }
     
     @Override
-    public ExamPaper getPaperDetail(Long paperId) {
-        // 获取文件信息
-        ExamPaper paper = jdbcTemplate.queryForObject(
-            "SELECT * FROM exam_paper WHERE id = ?",
-            new Object[]{paperId},
-            (rs, rowNum) -> {
-                ExamPaper p = new ExamPaper();
-                p.setId(rs.getLong("id"));
-                p.setPaperName(rs.getString("paper_name"));
-                p.setQuestionCount(rs.getInt("question_count"));
-                p.setCreateTime(rs.getTimestamp("create_time"));
-                p.setUpdateTime(rs.getTimestamp("update_time"));
-                return p;
-            }
-        );
-        
-        if (paper != null) {
-            // 获取题目列表
-            List<ExamQuestion> questions = jdbcTemplate.query(
-                "SELECT * FROM exam_question WHERE paper_id = ?",
+    public ExamPaper getPaperById(Long paperId) {
+        try {
+            ExamPaper paper = jdbcTemplate.queryForObject(
+                "SELECT * FROM exam_paper WHERE id = ?",
                 new Object[]{paperId},
                 (rs, rowNum) -> {
-                    ExamQuestion q = new ExamQuestion();
-                    q.setId(rs.getLong("id"));
-                    q.setPageNumber(rs.getInt("page_number"));
-                    q.setContent(rs.getString("content"));
-                    q.setImageData(rs.getString("image_data"));
-                    q.setPaperId(rs.getLong("paper_id"));
-                    q.setCreateTime(rs.getTimestamp("create_time"));
-                    q.setUpdateTime(rs.getTimestamp("update_time"));
-                    return q;
+                    ExamPaper p = new ExamPaper();
+                    p.setId(rs.getLong("id"));
+                    p.setPaperName(rs.getString("paper_name"));
+                    p.setQuestionCount(rs.getInt("question_count"));
+                    p.setCreateTime(rs.getTimestamp("create_time"));
+                    p.setUpdateTime(rs.getTimestamp("update_time"));
+                    return p;
                 }
             );
             
-            // 按照页码进行排序
-            questions.sort(Comparator.comparingInt(ExamQuestion::getPageNumber));
+            if (paper != null) {
+                // 获取题目列表
+                List<ExamQuestion> questions = jdbcTemplate.query(
+                    "SELECT * FROM exam_question WHERE paper_id = ?",
+                    new Object[]{paperId},
+                    (rs, rowNum) -> {
+                        ExamQuestion q = new ExamQuestion();
+                        q.setId(rs.getLong("id"));
+                        q.setPageNumber(rs.getInt("page_number"));
+                        q.setContent(rs.getString("content"));
+                        q.setImageData(rs.getString("image_data"));
+                        q.setPaperId(rs.getLong("paper_id"));
+                        q.setPaperName(rs.getString("paper_name"));
+                        q.setCreateTime(rs.getTimestamp("create_time"));
+                        q.setUpdateTime(rs.getTimestamp("update_time"));
+                        return q;
+                    }
+                );
+                
+                // 按照页码进行排序
+                questions.sort(Comparator.comparingInt(ExamQuestion::getPageNumber));
+                
+                paper.setQuestions(questions);
+            }
             
-            paper.setQuestions(questions);
+            return paper;
+        } catch (EmptyResultDataAccessException e) {
+            LOGGER.warn("未找到文件: id={}", paperId);
+            return null;
+        } catch (Exception e) {
+            LOGGER.error("获取文件详情失败: {}", e.getMessage(), e);
+            return null;
         }
-        
-        return paper;
     }
     
-    /**
-     * 从字符串中提取数字部分
-     * @param str 包含数字的字符串
-     * @return 提取出的数字
-     */
-    private int extractNumber(String str) {
-        if (str == null || str.isEmpty()) {
-            return 0;
-        }
-        
-        // 提取字符串中的数字部分
-        StringBuilder sb = new StringBuilder();
-        for (char c : str.toCharArray()) {
-            if (Character.isDigit(c)) {
-                sb.append(c);
-            }
-        }
-        
-        if (sb.length() > 0) {
-            return Integer.parseInt(sb.toString());
-        }
-        
-        return 0;
+    @Override
+    public List<ExamQuestion> processImageFile(byte[] fileContent, String paperName, String year) {
+        // 使用已存在的方法处理图片文件
+        return processImageFileByImage(fileContent, paperName, year);
+    }
+    
+    @Override
+    public List<ExamQuestion> processPdfFile(byte[] fileContent, String paperName, String year) {
+        // 使用已存在的方法处理PDF文件
+        return processPdfFileByImage(fileContent, paperName, year);
     }
     
     @Override
@@ -923,11 +935,12 @@ public class OCRServiceImpl implements OCRService {
         try {
             int result = jdbcTemplate.update(
                 "UPDATE exam_question SET page_number = ?, content = ?, " +
-                "image_data = ?, paper_id = ?, update_time = ? WHERE id = ?",
+                "image_data = ?, paper_id = ?, paper_name = ?, update_time = ? WHERE id = ?",
                 question.getPageNumber(),
                 question.getContent(),
                 question.getImageData(),
                 question.getPaperId(),
+                question.getPaperName(),
                 new Timestamp(System.currentTimeMillis()),
                 question.getId()
             );
@@ -984,6 +997,7 @@ public class OCRServiceImpl implements OCRService {
                     q.setContent(rs.getString("content"));
                     q.setImageData(rs.getString("image_data"));
                     q.setPaperId(rs.getLong("paper_id"));
+                    q.setPaperName(rs.getString("paper_name"));
                     q.setCreateTime(rs.getTimestamp("create_time"));
                     q.setUpdateTime(rs.getTimestamp("update_time"));
                     return q;
@@ -992,6 +1006,55 @@ public class OCRServiceImpl implements OCRService {
         } catch (Exception e) {
             LOGGER.error("获取题目失败: {}", e.getMessage(), e);
             return null;
+        }
+    }
+
+    @Override
+    public List<ExamPaper> searchPapersByName(String query) {
+        String likeQuery = "%" + query + "%";
+        try {
+            return jdbcTemplate.query(
+                "SELECT * FROM exam_paper WHERE paper_name LIKE ?",
+                new Object[]{likeQuery},
+                (rs, rowNum) -> {
+                    ExamPaper paper = new ExamPaper();
+                    paper.setId(rs.getLong("id"));
+                    paper.setPaperName(rs.getString("paper_name"));
+                    paper.setQuestionCount(rs.getInt("question_count"));
+                    paper.setCreateTime(rs.getTimestamp("create_time"));
+                    paper.setUpdateTime(rs.getTimestamp("update_time"));
+                    return paper;
+                }
+            );
+        } catch (Exception e) {
+            LOGGER.error("搜索文件失败: {}", e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<ExamQuestion> searchQuestionsByContent(String query) {
+        String likeQuery = "%" + query + "%";
+        try {
+            return jdbcTemplate.query(
+                "SELECT * FROM exam_question WHERE content LIKE ?",
+                new Object[]{likeQuery},
+                (rs, rowNum) -> {
+                    ExamQuestion question = new ExamQuestion();
+                    question.setId(rs.getLong("id"));
+                    question.setPaperId(rs.getLong("paper_id"));
+                    question.setPageNumber(rs.getInt("page_number"));
+                    question.setContent(rs.getString("content"));
+                    question.setImageData(rs.getString("image_data"));
+                    question.setPaperName(rs.getString("paper_name"));
+                    question.setCreateTime(rs.getTimestamp("create_time"));
+                    question.setUpdateTime(rs.getTimestamp("update_time"));
+                    return question;
+                }
+            );
+        } catch (Exception e) {
+            LOGGER.error("搜索题目失败: {}", e.getMessage(), e);
+            return new ArrayList<>();
         }
     }
 } 
