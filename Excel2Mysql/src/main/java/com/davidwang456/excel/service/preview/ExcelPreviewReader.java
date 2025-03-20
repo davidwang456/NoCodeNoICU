@@ -3,7 +3,7 @@ package com.davidwang456.excel.service.preview;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.*;
 import org.apache.poi.hssf.usermodel.*;
-import org.apache.poi.POIXMLDocumentPart;
+import org.apache.poi.ooxml.POIXMLDocumentPart;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -190,7 +190,7 @@ public class ExcelPreviewReader implements PreviewReader {
             return "";
         }
         
-        switch (cell.getCellTypeEnum()) {
+        switch (cell.getCellType()) {
             case STRING:
                 return cell.getStringCellValue();
             case NUMERIC:

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>多格式文档导入</title>
+</head>
+<body>
+<th:block th:fragment="template">
+    <template id="doc-template">
+        <el-card>
+            <div slot="header">
+                <span>多格式文档导入</span>
+            </div>
+            
+            <el-tabs v-model="activeTab">
+                <el-tab-pane label="上传文件" name="upload">
+                    <el-form :model="uploadForm" label-width="120px">
+                        <el-form-item label="选择文件">
+                            <el-upload
+                                class="upload-demo"
+                                action="#"
+                                :auto-upload="false"
+                                :on-change="handleFileChange"
+                                :show-file-list="true"
+                                :file-list="fileList"
+                                multiple>
+                                <el-button size="small" type="primary">选择文件</el-button>
+                                <div slot="tip" class="el-upload__tip">
+                                    支持多种格式：.doc .docx .eml .xls .xlsx .ppt .pptx .pdf .txt .json .csv 等
+                                    <br/>文件名将作为文档名称
+                                </div>
+                            </el-upload>
+                        </el-form-item>
+                        
+                        <el-form-item>
+                            <el-button type="primary" @click="startProcess" :loading="processing">开始处理</el-button>
+                        </el-form-item>
+                    </el-form>
+                    
+                    <!-- 处理进度 -->
+                    <div v-if="processing" style="margin-top: 20px;">
+                        <el-progress :percentage="progressPercentage" :text-inside="true" :stroke-width="18"></el-progress>
+                        <p>正在处理: {{ currentProcessingFile }}</p>
+                    </div>
+                </el-tab-pane>
+                
+                <el-tab-pane label="处理结果" name="result">
+                    <div v-if="recognitionResults.length === 0" style="text-align: center; padding: 20px;">
+                        <i class="el-icon-document" style="font-size: 48px; color: #909399;"></i>
+                        <p>暂无处理结果，请先上传文件并进行处理</p>
+                    </div>
+                    
+                    <div v-else>
+                        <el-table
+                            :data="paginatedRecognitionResults"
+                            border
+                            style="width: 100%">
+                            <el-table-column prop="pageNumber" label="页码" width="80"></el-table-column>
+                            <el-table-column prop="content" label="文字内容">
+                                <template slot-scope="scope">
+                                    <div v-html="formatContent(scope.row.content)"></div>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="页面图像" width="300">
+                                <template slot-scope="scope">
+                                    <div v-if="scope.row.imageData" class="question-image-container">
+                                        <el-image 
+                                            :src="scope.row.imageData" 
+                                            :preview-src-list="[scope.row.imageData]"
+                                            fit="contain"
+                                            style="max-height: 200px; max-width: 100%;">
+                                        </el-image>
+                                        <el-button 
+                                            size="mini" 
+                                            type="text" 
+                                            @click="showFullImage(scope.row.imageData)">
+                                            查看大图
+                                        </el-button>
+                                    </div>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="paperName" label="所属文件" width="200"></el-table-column>
+                            <el-table-column label="操作" width="150">
+                                <template slot-scope="scope">
+                                    <el-button
+                                        size="mini"
+                                        type="primary"
+                                        @click="editPage(scope.row, (recognitionCurrentPage-1)*recognitionPageSize + scope.$index)">编辑</el-button>
+                                    <el-button
+                                        size="mini"
+                                        type="danger"
+                                        @click="deletePage(scope.row, (recognitionCurrentPage-1)*recognitionPageSize + scope.$index)">删除</el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                        
+                        <!-- 分页控件 -->
+                        <div style="margin-top: 20px; text-align: center;">
+                            <el-pagination
+                                @current-change="handleRecognitionPageChange"
+                                :current-page.sync="recognitionCurrentPage"
+                                :page-size="recognitionPageSize"
+                                layout="prev, pager, next, jumper"
+                                :total="recognitionResults.length">
+                            </el-pagination>
+                        </div>
+                        
+                        <div style="margin-top: 20px; text-align: center;">
+                            <el-button type="success" @click="saveToDatabase" :loading="saving">保存到数据库</el-button>
+                        </div>
+                    </div>
+                </el-tab-pane>
+                
+                <el-tab-pane label="检索文件" name="history">
+                    <!-- 搜索栏 -->
+                    <div style="margin-bottom: 20px; display: flex;">
+                        <el-input
+                            v-model="searchQuery"
+                            placeholder="输入文件名称或内容关键词"
+                            style="width: 300px; margin-right: 10px;"
+                            @keyup.enter.native="searchPapersOrQuestions">
+                        </el-input>
+                        <el-button type="primary" @click="searchPapersOrQuestions" :loading="searching">
+                            <i class="el-icon-search"></i> 搜索
+                        </el-button>
+                        <el-button v-if="searchQuery.trim()" @click="clearSearch" style="margin-left: 10px;">
+                            <i class="el-icon-refresh"></i> 清除搜索
+                        </el-button>
+                    </div>
+                    
+                    <!-- 搜索结果提示 -->
+                    <div v-if="searchQuery.trim() && searchResults.length > 0" style="margin-bottom: 15px; padding: 8px 15px; background-color: #f0f9eb; border-radius: 4px;">
+                        <i class="el-icon-success" style="color: #67c23a;"></i>
+                        <span style="margin-left: 5px;">搜索"{{searchQuery}}"：找到 {{searchResults.length}} 个匹配结果</span>
+                    </div>
+                    
+                    <el-table
+                        :data="historyRecords"
+                        border
+                        style="width: 100%">
+                        <el-table-column prop="paperName" label="文件名称" width="300"></el-table-column>
+                        <el-table-column prop="questionCount" label="页面数量" width="120"></el-table-column>
+                        <el-table-column prop="createTime" label="创建时间" width="180"></el-table-column>
+                        <el-table-column label="匹配页面" width="120">
+                            <template slot-scope="scope">
+                                <span v-if="scope.row.questions && scope.row.questions.length > 0">
+                                    {{scope.row.questions.length}} 页
+                                </span>
+                                <span v-else>-</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="200">
+                            <template slot-scope="scope">
+                                <el-button
+                                    size="mini"
+                                    type="primary"
+                                    @click="viewPaper(scope.row)">查看</el-button>
+                                <el-button
+                                    size="mini"
+                                    type="danger"
+                                    @click="deletePaper(scope.row)">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </el-tab-pane>
+            </el-tabs>
+            
+            <!-- 编辑页面对话框 -->
+            <el-dialog title="编辑页面" :visible.sync="editDialogVisible">
+                <el-form :model="editForm" label-width="120px">
+                    <el-form-item label="页码">
+                        <el-input v-model="editForm.pageNumber" type="number"></el-input>
+                    </el-form-item>
+                    <el-form-item label="页面内容">
+                        <el-input type="textarea" v-model="editForm.content" :rows="5"></el-input>
+                        <div v-if="editForm.imageData" class="question-image-container" style="margin-top: 10px;">
+                            <el-image 
+                                :src="editForm.imageData" 
+                                :preview-src-list="[editForm.imageData]"
+                                fit="contain"
+                                style="max-height: 200px; max-width: 100%;">
+                            </el-image>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="所属文件">
+                        <el-input v-model="editForm.paperName"></el-input>
+                    </el-form-item>
+                </el-form>
+                <div slot="footer" class="dialog-footer">
+                    <el-button @click="editDialogVisible = false">取 消</el-button>
+                    <el-button type="primary" @click="confirmEdit">确 定</el-button>
+                </div>
+            </el-dialog>
+            
+            <!-- 查看文件对话框 -->
+            <el-dialog title="查看文件" :visible.sync="viewDialogVisible" width="80%">
+                <el-table
+                    :data="paginatedViewPaperQuestions"
+                    border
+                    style="width: 100%">
+                    <el-table-column prop="pageNumber" label="页码" width="80"></el-table-column>
+                    <el-table-column prop="content" label="文字内容">
+                        <template slot-scope="scope">
+                            <div v-html="formatContent(scope.row.content)"></div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="页面图像" width="300">
+                        <template slot-scope="scope">
+                            <div v-if="scope.row.imageData" class="question-image-container">
+                                <el-image 
+                                    :src="scope.row.imageData" 
+                                    :preview-src-list="[scope.row.imageData]"
+                                    fit="contain"
+                                    style="max-height: 200px; max-width: 100%;">
+                                </el-image>
+                                <el-button 
+                                    size="mini" 
+                                    type="text" 
+                                    @click="showFullImage(scope.row.imageData)">
+                                    查看大图
+                                </el-button>
+                            </div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="150">
+                        <template slot-scope="scope">
+                            <el-button
+                                size="mini"
+                                type="primary"
+                                @click="editPage(scope.row, -1)">编辑</el-button>
+                            <el-button
+                                size="mini"
+                                type="danger"
+                                @click="deletePage(scope.row)">删除</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+                
+                <!-- 分页控件 -->
+                <div style="margin-top: 20px; text-align: center;">
+                    <el-pagination
+                        @current-change="handleViewPageChange"
+                        :current-page.sync="viewCurrentPage"
+                        :page-size="viewPageSize"
+                        layout="prev, pager, next, jumper"
+                        :total="viewPaperQuestions.length">
+                    </el-pagination>
+                </div>
+            </el-dialog>
+            
+            <!-- 全屏图像查看对话框 -->
+            <el-dialog title="查看图像" :visible.sync="fullImageDialogVisible" width="90%" center>
+                <div style="text-align: center;">
+                    <el-image 
+                        :src="currentFullImage" 
+                        fit="contain"
+                        style="max-height: 80vh; max-width: 100%;">
+                    </el-image>
+                </div>
+                <div slot="footer" class="dialog-footer">
+                    <el-button @click="fullImageDialogVisible = false">关 闭</el-button>
+                </div>
+            </el-dialog>
+        </el-card>
+    </template>
+    
+    <style>
+    .question-image-container {
+        margin-top: 10px;
+        border: 1px dashed #dcdfe6;
+        padding: 10px;
+        border-radius: 4px;
+        background-color: #f8f8f8;
+    }
+    </style>
+</th:block>
+</body>
+</html> 

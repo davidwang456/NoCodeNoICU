@@ -78,6 +78,10 @@
                             <i class="el-icon-picture"></i>
                             <span slot="title">PDF数据导入</span>
                         </el-menu-item>
+                        <el-menu-item index="/doc">
+                            <i class="el-icon-document"></i>
+                            <span slot="title">多格式文档导入</span>
+                        </el-menu-item>
                         <el-menu-item index="/manage">
                             <i class="el-icon-s-data"></i>
                             <span slot="title">数据管理</span>
@@ -95,6 +99,7 @@
     <th:block th:replace="home :: template"></th:block>
     <th:block th:replace="import :: template"></th:block>
     <th:block th:replace="ocr :: template"></th:block>
+    <th:block th:replace="doc :: template"></th:block>
     <th:block th:replace="manage :: template"></th:block>
 
     <!-- 引入 JS 文件 -->
@@ -103,5 +108,8 @@
     <script src="/js/element-ui.js"></script>
     <script src="/js/axios.min.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/import.js"></script>
+    <script src="/js/ocr.js"></script>
+    <script src="/js/doc.js"></script>
 </body>
 </html> 

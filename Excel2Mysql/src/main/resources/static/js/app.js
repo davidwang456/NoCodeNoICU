@@ -701,6 +701,11 @@ const OCRPage = {
     }
 };
 
+// 文档导入页面组件
+const DocPage = {
+    render: h => h('doc-component')
+};
+
 // 数据管理页面组件
 const ManagePage = {
     template: '#manage-template',
@@ -889,7 +894,8 @@ const routes = [
     { path: '/home', component: HomePage },
     { path: '/import', component: ImportPage },
     { path: '/manage', component: ManagePage },
-    { path: '/ocr', component: OCRPage }
+    { path: '/ocr', component: OCRPage },
+    { path: '/doc', component: DocPage }
 ];
 
 const router = new VueRouter({

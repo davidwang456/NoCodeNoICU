@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.poi.POIXMLDocumentPart;
+import org.apache.poi.ooxml.POIXMLDocumentPart;
 import org.apache.poi.hssf.usermodel.HSSFClientAnchor;
 import org.apache.poi.hssf.usermodel.HSSFPatriarch;
 import org.apache.poi.hssf.usermodel.HSSFPicture;
